@@ -1,0 +1,609 @@
+/* Újrahasznált felületi elemek: panel, kártya, adattábla, űrlap, gomb, chip,
+ * állapotjelzők. Ami CSAK egy oldalon fordul elő, az a pages.css-be való.
+ *
+ * Az osztálynevek szándékosan a SZEREPÜKET írják le, nem az első előfordulási
+ * helyüket. A korábbi nevek ebben csúsztak el: a `.cart-table` az admin
+ * rendelés-, termék- és ügyféltáblát is stílusozta, a `.checkout-form` pedig a
+ * belépést és a regisztrációt is — így minden új szabály két jelentés között
+ * ingadozott.
+ */
+
+/* ---------- Panel: elhatárolt tartalomdoboz ---------- */
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-1);
+}
+
+.panel > :last-child {
+  margin-bottom: 0;
+}
+
+.panel-title {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+
+/* Panelfejléc: cím balra, mellékművelet (pl. "Szűrők törlése") jobbra. */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.panel-head > * {
+  margin-bottom: 0;
+}
+
+/* ---------- Eszközsor: szűrők/műveletek egy lista fölött ---------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  margin-bottom: var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.toolbar label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+/* A kereső kapja a maradék helyet, a többi szűrő a saját szélességét tartja. */
+.toolbar .toolbar-grow {
+  flex: 1 1 16rem;
+}
+
+.toolbar-count {
+  margin: 0;
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Űrlapok ---------- */
+
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 32rem;
+}
+
+.form-stack label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.form-stack label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-normal);
+}
+
+.form-stack label.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+/* A szövegszerű beviteli mezők KIZÁRÁSSAL vannak kijelölve, nem felsorolással.
+ *
+ * Ennek konkrét oka van: a `type` attribútum elhagyható (`<input required />`
+ * ugyanúgy szövegmező), de az `input[type="text"]` szelektor az ATTRIBÚTUMRA
+ * illeszkedik, nem a viselkedésre — a `type` nélküli mezőket tehát kihagyta, és
+ * azokon a böngésző alapértelmezett, 2px-es inset kerete maradt, keret- és
+ * sarokrádiusz nélkül. Egy űrlapon belül két különbözően festett mező lett
+ * belőle (Login: „Felhasználónév" vs. „Jelszó").
+ *
+ * Kizárva azok a típusok, amelyeknek saját, natív megjelenésük van. */
+input:not(
+    :is(
+        [type="checkbox"],
+        [type="radio"],
+        [type="range"],
+        [type="file"],
+        [type="color"],
+        [type="submit"],
+        [type="reset"],
+        [type="button"],
+        [type="image"]
+      )
+  ),
+select,
+textarea {
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  transition: border-color var(--motion-fast) var(--ease),
+    box-shadow var(--motion-fast) var(--ease);
+}
+
+/* A hover/fókusz keret is csak a fenti körre szól: egy jelölőnégyzet nem kap
+   akcentkeretet. */
+input:not(
+    :is(
+        [type="checkbox"],
+        [type="radio"],
+        [type="range"],
+        [type="file"],
+        [type="color"],
+        [type="submit"],
+        [type="reset"],
+        [type="button"],
+        [type="image"]
+      )
+  ):hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+
+/* A fókuszgyűrűt a base.css adja; itt csak a keret erősödik, hogy a mező
+   fókuszban akkor is elváljon, ha a gyűrűt a böngésző elnyeli. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-color: var(--color-accent);
+}
+
+/* Az automatikus kitöltés saját hátteret és szövegszínt fest a mezőre, amit a
+   `background` nem ír felül — sötét témában olvashatatlanul világos foltot
+   hagyna. A befelé húzott, tömör box-shadow az egyetlen módja, hogy a saját
+   felületszínünk maradjon. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0 100px var(--color-surface) inset;
+  caret-color: var(--color-text);
+}
+
+textarea {
+  min-height: 6rem;
+  resize: vertical;
+}
+
+/* Számmezőben a jobbra igazított, egyenletes szélességű számjegy olvashatóbb. */
+input[type="number"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Űrlap gombsora: az elsődleges művelet elöl, a kilépő út mellette. */
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+/* ---------- Gombok ---------- */
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease),
+    box-shadow var(--motion-fast) var(--ease);
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Másodlagos gomb: ugyanaz a súly, kisebb hangsúly. */
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-accent);
+}
+
+/* Csak ikon (kosár, téma, menü). Négyzetes, felirat nélkül — az aria-label adja
+   a nevét, ezért a kódban SOHA nem maradhat el mellőle. */
+.btn-icon {
+  background: transparent;
+  color: var(--color-text);
+  border-color: transparent;
+  padding: var(--space-2);
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: var(--color-surface-2);
+}
+
+/* Linknek látszó gomb: ott, ahol a művelet szövegközi (pl. "Törlés" egy
+   táblasorban). Megmarad gombnak — a szerep a viselkedést követi, nem a
+   kinézetet. */
+.link-button {
+  background: none;
+  border-color: transparent;
+  color: var(--color-accent);
+  padding: 0;
+  font-weight: var(--weight-medium);
+}
+
+.link-button:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+}
+
+/* Romboló művelet linkgombként (törlés). A szín mellett a felirat is beszél. */
+.link-button.is-danger {
+  color: var(--color-danger);
+}
+
+/* ---------- Kártya ---------- */
+
+.card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--motion-base) var(--ease),
+    box-shadow var(--motion-base) var(--ease),
+    transform var(--motion-base) var(--ease);
+}
+
+.card:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-2px);
+}
+
+/* Alacsonyabb kép, mint a megszokott 4/3: két sornyi kártya és a lapozó így
+   fér ki együtt egy 900px magas képernyőre. */
+.card img {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  background: var(--color-surface-2);
+  transition: transform var(--motion-slow) var(--ease);
+}
+
+.card:hover img {
+  transform: scale(1.03);
+}
+
+.card-body {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+}
+
+.card-body h3 {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+}
+
+/* A terméknév link, de nem akcentszínű: egy rácsnyi kék cím zajos, és a
+   kártyán úgyis minden kattintható. A hover teszi láthatóvá, hogy link. */
+.card-body h3 a {
+  color: var(--color-text);
+}
+
+.card-body h3 a:hover {
+  color: var(--color-accent);
+}
+
+/* A kártya utolsó gombja a doboz aljára tapad, hogy az eltérő hosszúságú nevek
+   mellett is egy vonalban álljanak a rácsban. Korábban ez a `button` ELEMEN
+   ült `margin-top: auto`-ként, és minden gombra hatott — a lapozótól a
+   fejlécig, ahol aztán egyenként kellett visszavonni. */
+.card-body > button:last-child,
+.card-body > :last-child > button:last-child {
+  margin-top: auto;
+}
+
+.category {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.price {
+  font-weight: var(--weight-bold);
+  font-size: var(--text-lg);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Adattábla ---------- */
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  font-size: var(--text-sm);
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: var(--color-surface-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+  background: var(--color-surface-2);
+}
+
+.data-table td input {
+  width: 4.5rem;
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Numerikus oszlop: a `tabular-nums` miatt a számjegyek egymás alá esnek. */
+.data-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Táblán belüli felsorolás (rendelési tételek) listajel és behúzás nélkül,
+   hogy a sorok ne nőjenek szét. */
+.data-table ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Táblát csak akkor görgetünk vízszintesen, ha muszáj — de akkor a SAJÁT
+   dobozában, hogy az oldal törzse sose görögjön oldalra. */
+.table-scroll {
+  overflow-x: auto;
+  border-radius: var(--radius-lg);
+}
+
+/* ---------- Chipek és jelzők ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  padding: 0 var(--space-1);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Állapotjelző chip (rendelés státusza, készlet). A szín MEGERŐSÍTI a
+   feliratot, nem helyettesíti — színvakság mellett is olvasható marad. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  background: var(--color-surface-3);
+  color: var(--color-text);
+}
+
+.status-pending {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.status-expired {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.status-delivered {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+/* ---------- Üzenetek ---------- */
+
+/* Az `.error` neve NEM változhat: az admin e2e `locator("p.error")`-ral keresi. */
+.error {
+  color: var(--color-danger);
+  font-weight: var(--weight-medium);
+}
+
+.notice {
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
+  color: var(--color-text);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+/* ---------- Üres állapot ---------- */
+
+.empty-state {
+  text-align: center;
+  padding: var(--space-16) var(--space-4);
+  max-width: 32rem;
+  margin: 0 auto;
+}
+
+.empty-state h1 {
+  margin-bottom: var(--space-3);
+}
+
+.empty-state p {
+  color: var(--color-text-muted);
+}
+
+/* Táblázat alatti "nincs találat" sor: ugyanaz az osztály, sokkal kevesebb
+   levegővel — itt a lista része, nem az oldal egésze. */
+.empty-state.is-inline {
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-text-muted);
+}
+
+/* ---------- Betöltés: csontváz ---------- */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 25%,
+    var(--color-surface-3) 37%,
+    var(--color-surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+/* A csontvázkártya pontosan akkora helyet foglal, mint a valódi termékkártya —
+   ettől nem ugrik meg az oldal, amikor megérkeznek az adatok. */
+.skeleton-card:hover {
+  transform: none;
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+
+.skeleton-image {
+  aspect-ratio: 4 / 3;
+  border-radius: 0;
+}
+
+.skeleton-line {
+  height: 0.85rem;
+}
+
+.skeleton-line.is-short {
+  width: 60%;
+}
+
+/* ---------- Lapozó ---------- */
+
+/* A lapozó a képernyő aljához tapad, és nem a lista VÉGÉN várja, hogy
+   legörgessenek érte. Egy teljes oldalnyi termék (12 db) sosem fér ki egy
+   képernyőre, tehát a folyás végére tett lapozó gyakorlatilag láthatatlan —
+   miközben az oldalsáv végig ott van, és azt sugallja, hogy minden kéznél van.
+   A `sticky` így viselkedik: görgetés közben lebeg, a lista legalján pedig
+   visszaül a helyére. */
+.pagination {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+}
+
+.pagination span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}

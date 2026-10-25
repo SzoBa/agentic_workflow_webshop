@@ -1,0 +1,94 @@
+# A konfigurációs kulcsok NEVE a spec 7.6 fejezetéből jön (PORT, LOG_LEVEL, ...),
+# ezért mindenhol nyers környezeti változó a forrás, nem Spring-relaxed binding.
+server:
+  port: ${PORT:3001}
+  # Szabályos leállás: a futó kérések befejeződhetnek, de nem várunk rájuk örökké.
+  shutdown: graceful
+  # forward-headers-strategy SZÁNDÉKOSAN nincs beállítva (marad NONE).
+  # A FRAMEWORK strategy az X-Forwarded-For lánc BAL SZÉLSŐ elemét teszi a
+  # getRemoteAddr()-be (ForwardedHeaderUtils.parseForwardedFor: tokenize(...)[0]),
+  # az pedig a KLIENS által küldött, tehát hamisítható érték — ráadásul a
+  # TRUSTED_PROXY_HOPS-tól függetlenül, minden telepítésen. Ezzel a bejelentkezési
+  # rate limiting kulcsa hamisíthatóvá válna. A valós kliens IP kiolvasása
+  # ezért a ClientIpResolver dolga, ami a lánc VÉGÉTŐL számol.
+
+spring:
+  application:
+    name: webshop-server
+  # Opcionális .env betöltés a modul gyökeréből (server-java/.env), a
+  # referenciaimplementáció server/src/env.ts-ének megfelelője. A behúzott fájl
+  # ALACSONYABB prioritású, mint a valódi környezeti változók — tehát a beállított
+  # env-változót nem írja felül. Hiánya nem hiba (optional:).
+  config:
+    import: optional:file:./.env[.properties]
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/webshop}
+    username: ${DATABASE_USER:webshop}
+    # A jelszónak SZÁNDÉKOSAN nincs alapértéke: hiánya indulási hiba (spec 7.6). Egy
+    # működő, de kitalálható tartalék érték azt jelentené, hogy az elfelejtett
+    # környezeti változóval éles telepítés is elindul — a hiba csendben maradna.
+    # A fejlesztői kényelem helye a `dev` profil a fájl végén.
+    password: ${DATABASE_PASSWORD}
+  jpa:
+    # A séma kizárólag Flyway migrációból jön — az alkalmazás sosem hozza létre.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    # Az időbélyegek ISO szövegek (nem epoch számok) — a HTTP-szerződés része.
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+  web:
+    resources:
+      # Az éles kiszolgálás a lefordított frontendet adja (SPA-visszaeséssel).
+      static-locations: ${STATIC_DIR:file:../client/dist/}
+
+logging:
+  level:
+    root: ${LOG_LEVEL:info}
+  structured:
+    format:
+      # Strukturált (JSON) napló a szabványos kimenetre — spec 7.3.
+      console: ecs
+
+# Alkalmazás-specifikus kulcsok. Az értékek nyers env-változókból jönnek, hogy a
+# spec 7.6 táblázatával szó szerint egyezzenek.
+webshop:
+  order-reservation-hours: ${ORDER_RESERVATION_HOURS:}
+  token-ttl-hours: ${TOKEN_TTL_HOURS:}
+  expiry-sweep-minutes: ${ORDER_EXPIRY_SWEEP_MINUTES:}
+  # Hány MEGBÍZHATÓ proxy van a kliens és a szerver között. 0 = nincs proxy, az
+  # X-Forwarded-For fejlécet egyáltalán nem olvassuk. Lásd ClientIpResolver.
+  trusted-proxy-hops: ${TRUSTED_PROXY_HOPS:}
+  cors-origins: ${CORS_ORIGINS:}
+  gmail-client-id: ${GMAIL_CLIENT_ID:}
+  gmail-client-secret: ${GMAIL_CLIENT_SECRET:}
+  gmail-refresh-token: ${GMAIL_REFRESH_TOKEN:}
+  gmail-sender: ${GMAIL_SENDER:}
+  order-notify-to: ${ORDER_NOTIFY_TO:}
+  # EGYSZERI adatátvétel egy meglévő lowdb db.json-ból. Üresen nincs import —
+  # ez a normál üzem. Lásd hu.webshop.bootstrap.DbJsonImporter.
+  import-file: ${IMPORT_FILE:}
+
+---
+# FEJLESZTŐI profil. Csak azt tartalmazza, ami a docker-compose.yml szerinti helyi
+# Postgreshez kell. A start.sh ezt kapcsolja be; kézi indításnál:
+#   mvn spring-boot:run -Dspring-boot.run.profiles=dev
+# Éles üzemben soha nincs bekapcsolva, ezért ott a hiányzó DATABASE_PASSWORD
+# továbbra is azonnali, beszédes indulási hiba.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    password: ${DATABASE_PASSWORD:webshop}

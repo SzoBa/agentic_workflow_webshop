@@ -1,0 +1,11 @@
+# A kontextuson KÍVÜL futó komponensek regisztrációja.
+#
+# Mindkettő olyan pillanatban dolgozik, amikor bean-ek még/már nincsenek, ezért nem
+# lehetnek @Component-ek:
+#  - a naplószint szűrése a naplórendszer indítása ELŐTT kell megtörténjen,
+#  - az indítási hiba figyelője pedig pont akkor kell fusson, amikor a kontextus nem jött létre.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+hu.webshop.ops.LogLevelEnvironmentPostProcessor
+
+org.springframework.context.ApplicationListener=\
+hu.webshop.ops.StartupFailureLogger

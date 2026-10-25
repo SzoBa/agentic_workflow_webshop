@@ -1,0 +1,28 @@
+# Fejlesztői PostgreSQL a Java backendhez.
+# Indítás:  docker compose up -d      Leállítás:  docker compose down
+# Az adatok named volume-ban maradnak; teljes reset: docker compose down -v
+# A projektnév rögzített: a mappanévből (`server-java`) képzett alapértelmezés ütközne
+# minden más, ugyanígy elnevezett checkout konténerével és volume-ával.
+name: agentic-webshop
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # Nincs rögzített container_name: a 2026-07-19-i, félbehagyott migrációs kísérletből
+    # maradt egy `webshop-postgres` nevű (leállított) konténer, és a fix név ütközne vele.
+    environment:
+      POSTGRES_DB: webshop
+      POSTGRES_USER: webshop
+      POSTGRES_PASSWORD: webshop
+    ports:
+      - "5432:5432"
+    volumes:
+      - webshop-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webshop -d webshop"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  webshop-pgdata:

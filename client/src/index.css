@@ -1,0 +1,18 @@
+/* A stíluslapok belépési pontja. Érdemi szabály ide NEM kerül — a sorrend a
+ * lényeg, és az önmagában is elárulja a réteges felépítést:
+ *
+ *   tokens     – változók (szín, típus, térköz, mozgás); semmi más nem ad
+ *                nyers értéket
+ *   base       – elemre szóló alapok: reset, tipográfia, fókusz, mozgás
+ *   shell      – a keret: oldalsáv, fejléc, tartalom, lábléc, kosárfiók
+ *   components – újrahasznált elemek: panel, kártya, adattábla, űrlap, gomb
+ *   pages      – ami csak egyetlen képernyőn fordul elő
+ *
+ * A későbbi lap felülírhatja a korábbit, fordítva nem — ezért nincs szükség
+ * `!important`-ra sehol.
+ */
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/shell.css";
+@import "./styles/components.css";
+@import "./styles/pages.css";

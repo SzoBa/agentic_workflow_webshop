@@ -1,0 +1,25 @@
+{
+  "verzio": 1,
+  "ervenyes": "2026-08-04",
+  "penznem": "USD",
+  "forras": "A `claude-api` skill ártáblája (a skill gyorsítótára 2026-06-24-i). Nem mérés: levezetett adat, ezért minden kiírt összeg mellett ott a fájl és ez a dátum.",
+  "megjegyzes": [
+    "A `be_millio` / `ki_millio` az input és output ára millió tokenenként.",
+    "A cache szorzói modelltől függetlenek és a kódban vannak (`futas-kozos.mjs`): olvasás 0,1x, írás 1,25x (5 perces TTL) és 2x (1 órás TTL) az input árához képest.",
+    "A Sonnet 5-nek 2026-08-31-ig bevezető ára van (2/10). SZÁNDÉKOSAN a teljes árat (3/15) írjuk ide: egy keretnek felfelé kell tévednie, nem lefelé, és a bevezető ár amúgy is lejár e fájl élettartamán belül.",
+    "Ismeretlen modellre a mérleg NEM ír pénzt — a hiányzó ár nem ingyenes delegálás. Olyankor a relatív költség-egység marad az egyetlen szám."
+  ],
+  "modellek": {
+    "claude-fable-5": { "be_millio": 10, "ki_millio": 50 },
+    "claude-mythos-5": { "be_millio": 10, "ki_millio": 50 },
+    "claude-opus-5": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-8": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-7": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-6": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-5": { "be_millio": 5, "ki_millio": 25 },
+    "claude-sonnet-5": { "be_millio": 3, "ki_millio": 15 },
+    "claude-sonnet-4-6": { "be_millio": 3, "ki_millio": 15 },
+    "claude-sonnet-4-5": { "be_millio": 3, "ki_millio": 15 },
+    "claude-haiku-4-5": { "be_millio": 1, "ki_millio": 5 }
+  }
+}

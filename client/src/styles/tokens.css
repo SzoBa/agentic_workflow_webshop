@@ -1,0 +1,174 @@
+/* Design tokenek — a felület EGYETLEN forrása színre, tipográfiára, térközre.
+ *
+ * A többi stíluslap csak ezekre a változókra hivatkozik: nyers hexkód, nyers
+ * px-érték vagy egyedi árnyék máshol nem születhet. Így a téma (világos/sötét)
+ * és az arányrendszer egy helyen állítható, és nem csúszik szét oldalanként.
+ *
+ * A színek OKLCH-ban vannak. Az OKLCH világossági tengelye (az első szám)
+ * érzékelés-arányos, ezért két token kontrasztja nagyjából a különbségükből
+ * megbecsülhető — a hex/HSL skálákon ez nem igaz, ott minden árnyalatot külön
+ * kell méricskélni.
+ *
+ * A TÉMA MINDIG a <html data-theme="light|dark"> attribútumból jön, sosem
+ * közvetlenül a `prefers-color-scheme`-ből. Az attribútumot az index.html
+ * fejlécében futó apró script állítja be az első festés ELŐTT (különben a
+ * sötét témát választó látogató egy villanásnyi fehéret kapna), utána a
+ * ui.tsx tartja karban. Így itt elég egyetlen sötét blokk — nem kell
+ * ugyanazokat az értékeket médiakérdésben is megismételni.
+ */
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Felületek: a háttértől a legkiemeltebb rétegig. A hűvös (265-ös) árnyalat
+     végigmegy a szürkéken is — a teljesen semleges szürke a kék akcent mellett
+     piszkosnak látszik. */
+  --color-bg: oklch(0.98 0.004 265);
+  --color-surface: oklch(1 0 0);
+  --color-surface-2: oklch(0.965 0.006 265);
+  --color-surface-3: oklch(0.93 0.009 265);
+
+  /* A `border` csak elválasztó vonal (panel, sor), a `border-strong` viszont
+     KEZELŐSZERVEK kerete (beviteli mező, másodlagos gomb) — arra a WCAG 3:1-et
+     ír elő, ezért sötétebb, mint amilyet a szemünk elsőre választana. */
+  --color-border: oklch(0.9 0.008 265);
+  --color-border-strong: oklch(0.66 0.016 265);
+
+  /* Szöveg három szinten: főszöveg, másodlagos információ (dátum, darabszám),
+     és a leghalványabb szint (láblécek, szekciócímkék).
+     A harmadik szint sem mehet 4.5:1 alá: valódi feliratokat hordoz, nem
+     díszítés. Emiatt van 0.56-on és nem világosabban — a világosabb árnyalat
+     szebben nézett ki, de 2.9:1-et adott a háttéren. */
+  --color-text: oklch(0.26 0.02 268);
+  --color-text-muted: oklch(0.5 0.02 268);
+  --color-text-faint: oklch(0.54 0.016 268);
+
+  /* Akcent: egy hangsúlyszín, három szerepben. */
+  --color-accent: oklch(0.55 0.19 268);
+  --color-accent-strong: oklch(0.47 0.19 268);
+  --color-accent-soft: oklch(0.955 0.028 268);
+  --color-on-accent: oklch(0.99 0 0);
+
+  /* Állapotszínek. Mindegyikhez tartozik egy halvány pár a chipek hátteréhez.
+     A szín SOHA nem egyedüli jelentéshordozó: mellette mindig ott a felirat. */
+  --color-success: oklch(0.49 0.14 155);
+  --color-success-soft: oklch(0.95 0.04 155);
+  --color-warning: oklch(0.51 0.14 65);
+  --color-warning-soft: oklch(0.95 0.05 75);
+  --color-danger: oklch(0.52 0.19 25);
+  --color-danger-soft: oklch(0.955 0.03 25);
+
+  --color-star: oklch(0.75 0.16 80);
+  --color-focus: oklch(0.6 0.2 268);
+
+  /* Árnyékok. Világos témában valódi árnyék, sötétben inkább keret — lásd ott. */
+  --shadow-1: 0 1px 2px oklch(0.26 0.02 268 / 0.06),
+    0 1px 3px oklch(0.26 0.02 268 / 0.05);
+  --shadow-2: 0 2px 4px oklch(0.26 0.02 268 / 0.05),
+    0 4px 12px oklch(0.26 0.02 268 / 0.08);
+  --shadow-3: 0 8px 20px oklch(0.26 0.02 268 / 0.1),
+    0 20px 44px oklch(0.26 0.02 268 / 0.12);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Sötét témában a rétegek FELFELÉ világosodnak (a magasabb réteg világosabb),
+     ez helyettesíti az árnyékot mint mélységjelzést. */
+  --color-bg: oklch(0.19 0.012 268);
+  --color-surface: oklch(0.235 0.014 268);
+  --color-surface-2: oklch(0.275 0.016 268);
+  --color-surface-3: oklch(0.32 0.018 268);
+
+  --color-border: oklch(0.35 0.018 268);
+  --color-border-strong: oklch(0.56 0.022 268);
+
+  --color-text: oklch(0.95 0.008 268);
+  --color-text-muted: oklch(0.75 0.015 268);
+  --color-text-faint: oklch(0.62 0.015 268);
+
+  /* Sötét háttéren a telített akcent vibrál, ezért világosabb és kevésbé
+     telített változat kell — a kontraszt így is 4.5:1 fölött marad. */
+  --color-accent: oklch(0.72 0.15 268);
+  --color-accent-strong: oklch(0.8 0.13 268);
+  --color-accent-soft: oklch(0.32 0.06 268);
+  --color-on-accent: oklch(0.17 0.02 268);
+
+  --color-success: oklch(0.75 0.15 155);
+  --color-success-soft: oklch(0.3 0.06 155);
+  --color-warning: oklch(0.79 0.14 75);
+  --color-warning-soft: oklch(0.32 0.06 70);
+  --color-danger: oklch(0.72 0.17 25);
+  --color-danger-soft: oklch(0.31 0.08 25);
+
+  --color-star: oklch(0.82 0.16 80);
+  --color-focus: oklch(0.78 0.15 268);
+
+  /* Sötétben a fekete árnyék nem látszik, ezért halványabb és nagyobb. */
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.4);
+  --shadow-2: 0 2px 6px oklch(0 0 0 / 0.45), 0 8px 20px oklch(0 0 0 / 0.35);
+  --shadow-3: 0 10px 28px oklch(0 0 0 / 0.5), 0 24px 60px oklch(0 0 0 / 0.45);
+}
+
+:root {
+  /* Betűk. Rendszerbetű: nincs webfont-letöltés, tehát nincs villanó szöveg
+     (FOUT) és nincs külső kérés sem. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas,
+    monospace;
+
+  /* Típusskála 1.25-ös aránnyal. A nagyobb fokozatok `clamp()`-elve nőnek: a
+     cím mobilon nem törik szét, asztalon mégis van hangsúlya. */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: clamp(1.25rem, 1.15rem + 0.5vw, 1.4rem);
+  --text-2xl: clamp(1.5rem, 1.3rem + 1vw, 1.85rem);
+  --text-3xl: clamp(1.9rem, 1.5rem + 2vw, 2.5rem);
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.55;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Térközök 4px-es rácson. Csak ezek használhatók margóra/paddingra/gap-re —
+     a "még egy kis 6px" fajta egyedi értékek teszik szemcséssé a ritmust. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Mozgás. A `--motion-*` időket a base.css nullázza, ha a látogató kevesebb
+     mozgást kért — ezért minden átmenetnek ezeken keresztül kell mennie. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --ease: cubic-bezier(0.2, 0, 0.1, 1);
+
+  /* Rétegsorrend egy helyen: így látszik, mi takar mit. */
+  --z-sticky: 10;
+  --z-topbar: 20;
+  --z-sidebar: 30;
+  --z-drawer: 40;
+
+  /* A héj méretei. A `--sidebar-w` több helyen kell (rács, mobil eltolás). */
+  --sidebar-w: 17.5rem;
+  --content-max: 78rem;
+}

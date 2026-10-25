@@ -1,0 +1,610 @@
+# CI — a repó két, egymástól független build-láncát külön jobban futtatja
+# (npm workspace: `client/`, Maven modul: `server-java/`), plusz egy linter, a
+# nyelvfüggetlen konformancia-katalógus, a végponttól végpontig futó e2e váz, és
+# három biztonsági kör (SAST + titkok + függőség-sebezhetőségek).
+#
+# A jobok szándékosan párhuzamosak és — a konformancia kivételével — nem függenek
+# egymástól: a frontend és a backend között csak a HTTP-szerződés a kapcsolat
+# (spec/backend/), közös build-artefaktum nincs.
+name: CI
+
+# A `push` SZÁNDÉKOSAN csak a hosszú életű ágakra szól, a `feature/**` nincs benne.
+# Amíg mindkettő fel volt sorolva, egy nyitott PR-rel rendelkező feature-ág minden
+# commitja KÉT teljes kört indított (hat-hat job), és a concurrency sem vonta össze
+# őket: a push a `refs/heads/...`, a PR a `refs/pull/N/merge` refen fut, tehát külön
+# csoportba estek.
+#
+# A kettő nem ugyanazt méri, és a PR-változat a hasznosabb: a `push` az ágat méri
+# ahogy commitolva van, a `pull_request` a CÉLÁGGAL VETT ÖSSZEFÉSÜLÉS eredményét —
+# az utóbbi fogja meg azt a viselkedésbeli ütközést, ami külön-külön egyik ágon
+# sincs benne. A repó PR-alapú (a történetben #5–#9 PR-merge), tehát a feature-ágak
+# lefedettsége megmarad.
+#
+# Ára, tudatosan vállalva: egy feature-ág a PR MEGNYITÁSÁIG nem kap CI-t. Ha egy
+# ágat PR nélkül kell körbemérni, arra a `workflow_dispatch` való.
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  # A heti ütemezett kör (`schedule: cron "0 4 * * 1"`) KI VAN KAPCSOLVA.
+  # Amit adott: a Semgrep szabálycsomagok és a TruffleHog detektorai attól is
+  # találhatnak újat, hogy a kód nem változott — ezt most csak kézi indítás
+  # (`workflow_dispatch`) hozza elő, tehát magától nem derül ki.
+  workflow_dispatch:
+
+# Új push esetén a még futó, elavult körök leállnak — kivéve a főágakon,
+# ahol minden commit eredménye érdekes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  JAVA_VERSION: "25"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linter. Három, egymást kiegészítő ellenőrzés:
+  #   - eslint        : a kliens és a Node-szkriptek lintje (eslint.config.mjs)
+  #   - tsc --noEmit  : típusellenőrzés (a lint SZÁNDÉKOSAN típusinformáció nélkül
+  #                     fut, hogy gyors maradjon — a típushibákat ez fogja meg)
+  #   - shellcheck    : a start.sh shell-lintje (ubuntu-latest tartalmazza)
+  #   - sorvég-őr     : a start.cmd/start.sh sorvégei és kódlapja (.gitattributes)
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint (ESLint + típusellenőrzés + shell)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Függőségek telepítése
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      # A tsconfig-ban már `noEmit: true` van, a -p csak a projektet választja ki.
+      # A `test` mappa is benne van az include-ban, tehát a tesztek típushibái is
+      # kiesnek itt (a Vitest esbuilddel csak leveszi a típusokat, nem ellenőrzi).
+      - name: TypeScript típusellenőrzés (client)
+        run: npx tsc --noEmit -p client/tsconfig.json
+
+      # A start.sh a teljes stacket indító fejlesztői szkript.
+      #
+      # A kapu WARNING szinten van, nem INFO-n: a start.sh minden takarítófüggvényét
+      # (`cleanup`, `kill_tree`, `win_pid`) kizárólag a `trap` hívja, amit a
+      # shellcheck nem lát — ezért mindegyikre SC2317-et ("unreachable") ír. Az az
+      # ~40 sornyi INFO téves riasztás elfedné a valódi találatokat, a warning és
+      # error szint viszont eddig is tiszta volt.
+      - name: shellcheck (start.sh)
+        run: |
+          shellcheck --version
+          shellcheck --severity=warning start.sh
+
+      # A .gitattributes garantálja, hogy a start.cmd CRLF-fel, a start.sh LF-fel
+      # kerül a munkakönyvtárba — MINDEN platformon, a checkout is így adja. Ez a
+      # lépés azt méri, hogy a garancia tényleg él-e:
+      #   - a cmd.exe a batch-fájlt soronként, OEM kódlapon olvassa: LF sorvég vagy
+      #     ékezetes karakter elrontja az értelmezést,
+      #   - a bash CRLF-es szkripten "\r: command not found"-dal áll meg.
+      - name: Sorvég- és kódlap-őr (start.cmd / start.sh)
+        run: |
+          python3 - <<'PY'
+          import sys
+
+          hibak = []
+          cmd = open("start.cmd", "rb").read()
+          sh = open("start.sh", "rb").read()
+
+          if cmd.count(b"\n") != cmd.count(b"\r\n"):
+              hibak.append("start.cmd: nem minden sorvég CRLF (a cmd.exe elrontja) — lásd .gitattributes")
+          if any(b > 127 for b in cmd):
+              hibak.append("start.cmd: nem-ASCII karakter (az OEM kódlap elrontja) — írd át ASCII-ra")
+          if b"\r" in sh:
+              hibak.append("start.sh: CR karaktert tartalmaz (a bash elhasal rajta) — lásd .gitattributes")
+
+          if hibak:
+              for h in hibak:
+                  print(f"::error::{h}")
+              sys.exit(1)
+          print("start.cmd/start.sh sorvég + kódlap: OK")
+          PY
+
+      # A `.claude/` alatti skillek és agentek szerkezeti ellenőrzése. Saját
+      # szkript, nincs hozzá külön függőség — eddig CSAK kézzel futott.
+      #
+      # MIÉRT KAPU. A `spec-guard.mjs` ISMERETLEN mód-stringre `defer`-t ad (a
+      # `switch (MODE)` default ága), tehát egy elgépelt mód egy agent `hooks:`
+      # blokkjában NÉMÁN kikapcsolja az őrt: se hiba, se figyelmeztetés, a
+      # futás zöld marad. Ezen a szkripten kívül ezt semmi nem fogja meg.
+      # Ugyanez a lépés jelzi a halott `references/` linkeket, az árván maradt
+      # csomagolt fájlokat és a nem létező skillre mutató `skills:` bejegyzést.
+      #
+      # A szkript CSAK `HIBA`-ra bukik (exit 1). A `FIGYELEM` mérlegelést kér,
+      # nem javítást, ezért nem viszi pirosra a CI-t — jelenleg 0 HIBA /
+      # 4 FIGYELEM.
+      - name: Skill- és agent-ellenőrzés (.claude/)
+        run: node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind
+
+  # ---------------------------------------------------------------------------
+  # Frontend: Vitest + produkciós build. Az `npm test` a gyökérből fut
+  # (vitest.config.ts), a build a client workspace-ben.
+  # ---------------------------------------------------------------------------
+  client:
+    name: Frontend (Vitest + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Függőségek telepítése
+        run: npm ci
+
+      - name: Tesztek
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # ---------------------------------------------------------------------------
+  # Backend: `mvn test`. A tesztek nagy része integrációs — valódi HTTP + valódi
+  # Postgres Testcontainersen keresztül, ezért Docker kell a futtatóban
+  # (az ubuntu-latest image-en eleve fut).
+  #
+  # Környezeti változó nem kell: a server-java/.env minden kulcsa opcionális,
+  # az adatbázist a Testcontainers adja.
+  # ---------------------------------------------------------------------------
+  server:
+    name: Backend (mvn test, Testcontainers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server-java
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # A -B (batch) kikapcsolja a letöltési progress-zajt.
+      - name: Tesztek
+        run: mvn -B test
+
+      # A JaCoCo riportot minden esetben feltöltjük — bukott tesztnél is az az
+      # első kérdés, mi futott le egyáltalán.
+      - name: JaCoCo riport feltöltése
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: server-java/target/site/jacoco/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Konformancia: a spec/backend/konformancia.md 67 esetéből az 54 HTTP-n mérhető
+  # (a maradék 13 `⚙` jelű eset a `mvn test`-ben fut, lásd a `server` jobot).
+  #
+  # A katalógus KIZÁRÓLAG HTTP-t használ, semmilyen build-láncra nem támaszkodik —
+  # ezért itt nincs `npm ci` sem: a run.mjs csak Node-beépítettekre épül.
+  #
+  # A --clean-store azt ÁLLÍTJA a futtatóról, hogy friss adattároló ellen fut; a
+  # job épp ezt biztosítja (új Postgres konténer + Flyway seed minden körben).
+  # ---------------------------------------------------------------------------
+  conformance:
+    name: Konformancia (54 HTTP-eset)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: webshop
+          POSTGRES_USER: webshop
+          POSTGRES_PASSWORD: webshop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U webshop -d webshop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # A tesztek itt kimaradnak: azokat a `server` job futtatja. Ez a job a
+      # lefordított alkalmazást méri.
+      - name: Backend csomagolása
+        run: mvn -B -DskipTests package
+        working-directory: server-java
+
+      # A java -jar indításhoz nem kell külön JVM-argumentum: a Byte Buddy
+      # experimental flaget a WebshopApplication.main állítja be.
+      # A client/dist hiánya nem baj — az SPA-visszaesés hiányzó fájlra is elindul,
+      # a katalógus pedig csak /api/ útvonalakat hív.
+      - name: Backend indítása
+        run: |
+          nohup java -jar server-java/target/webshop-server-*.jar > backend.log 2>&1 &
+          echo "PID=$!"
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/webshop
+          DATABASE_USER: webshop
+          DATABASE_PASSWORD: webshop
+          PORT: "3001"
+
+      - name: Várakozás a /api/health-re
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/api/health > /dev/null; then
+              echo "A backend $i másodperc után válaszol."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::A backend 60 másodperc alatt sem indult el."
+          tail -50 backend.log
+          exit 1
+
+      - name: Konformancia-esetek
+        run: node spec/backend/conformance/run.mjs --base-url http://localhost:3001 --clean-store
+
+      # Bukásnál a szerver naplója az első kérdés — a HTTP-válasz önmagában
+      # ritkán mondja meg, mi történt a backend belsejében.
+      - name: Backend napló feltöltése
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-backend-log
+          path: backend.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # E2E: a Gherkin/Cucumber teszt-váz valódi böngészővel (e2e/).
+  #
+  # A PRODUKCIÓ-SZERŰ topológiában fut, nem a fejlesztőiben: a Spring szolgálja ki
+  # a lefordított `client/dist`-et ÉS az API-t is a 3001-en, tehát nincs Vite és
+  # nincs proxy. Így a job azt méri, ami élesben is összeáll — a Vite dev szerver
+  # sajátosságai (HMR, on-the-fly transzformáció) nem folynak bele.
+  #
+  # A bring-up (Postgres service + jar csomagolás + health-várakozás) SZÁNDÉKOSAN
+  # ismétli a `conformance` jobét, ahelyett hogy közös lépésbe lenne kiemelve: a
+  # két job különböző hibamódú és különböző futásidejű, és a repó CI-ja
+  # kifejezetten független, párhuzamos jobokból áll. Composite action-be emelni
+  # külön változtatás, nem ennek a jobnak a dolga.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (Cucumber + Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: webshop
+          POSTGRES_USER: webshop
+          POSTGRES_PASSWORD: webshop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U webshop -d webshop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Két, egymástól FÜGGETLEN npm projekt van a futásban: a gyökér workspace
+      # (a klienst fordítja) és az e2e/ csomag (a vázat futtatja). Az e2e/
+      # szándékosan NEM workspace-tag — különben a Playwright és a Cucumber minden
+      # más job `npm ci`-jébe is bekerülne, böngésző-letöltéssel együtt.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            e2e/package-lock.json
+
+      - name: Kliens fordítása (client/dist)
+        run: |
+          npm ci
+          npm run build
+
+      - name: Backend csomagolása
+        run: mvn -B -DskipTests package
+        working-directory: server-java
+
+      # A STATIC_DIR-t itt meg KELL adni: az application.yml alapértéke
+      # `file:../client/dist/`, ami a server-java/ könyvtárhoz képest értendő —
+      # a jart viszont a repó gyökeréből indítjuk.
+      - name: Backend indítása (a klienst is ez szolgálja ki)
+        run: |
+          nohup java -jar server-java/target/webshop-server-*.jar > backend.log 2>&1 &
+          echo "PID=$!"
+        env:
+          DATABASE_URL: jdbc:postgresql://localhost:5432/webshop
+          DATABASE_USER: webshop
+          DATABASE_PASSWORD: webshop
+          PORT: "3001"
+          STATIC_DIR: file:client/dist/
+
+      - name: Várakozás a /api/health-re
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3001/api/health > /dev/null; then
+              echo "A backend $i másodperc után válaszol."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::A backend 60 másodperc alatt sem indult el."
+          tail -50 backend.log
+          exit 1
+
+      # Csak Chromium — nincs böngésző-mátrix. A --with-deps a headless futáshoz
+      # kellő rendszerkönyvtárakat is felteszi az ubuntu image-re.
+      - name: E2E függőségek és böngésző
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: E2E szcenáriók
+        run: npm run e2e:ci -- --base-url http://localhost:3001
+        working-directory: e2e
+
+      # Bukásnál mindkettő kell: a riport azt mondja meg, mit LÁTOTT a böngésző
+      # (képernyőképpel és konzolnaplóval), a backend naplója azt, miért.
+      - name: E2E riport feltöltése
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: e2e/reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Backend napló feltöltése
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-backend-log
+          path: backend.log
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # SAST: Semgrep. A hivatalos konténerképben fut, így nem kell külön telepítés.
+  # Regisztrációs token (SEMGREP_APP_TOKEN) NEM kell: a szabálycsomagokat a
+  # nyilvános registry-ből tölti.
+  #
+  # Kétlépcsős: előbb egy teljes, NEM buktató kör a SARIF riportért (így a
+  # figyelmeztetések is bekerülnek a Code scanning nézetbe), majd egy szűkített
+  # kör, ami csak ERROR súlyosságú találatra piros. Így egy új WARNING nem
+  # blokkolja azonnal az összes PR-t, egy valódi sebezhetőség viszont igen.
+  # ---------------------------------------------------------------------------
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # A konténer rootként fut, a munkakönyvtár viszont a runner userének
+      # tulajdona — enélkül a semgrep git-alapú fájllistázása elhasal.
+      - name: Git safe.directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # A kizárásokat a repó gyökerében lévő .semgrepignore tartja.
+      - name: Semgrep scan (SARIF riport)
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --config p/owasp-top-ten \
+            --config p/java \
+            --config p/typescript \
+            --config p/react \
+            --config p/github-actions \
+            --metrics=off \
+            --sarif --output semgrep.sarif
+
+      - name: SARIF feltöltése a Code scanning nézetbe
+        if: always()
+        continue-on-error: true # privát repóban GitHub Advanced Security nélkül nem elérhető
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      # Ez a lépés a kapu. NEM futtatja újra a szkennelést: minden szükséges adat
+      # benne van a fenti kör SARIF riportjában, a második teljes kör a job idejének
+      # nagyjából a felét vitte el, a két, kézzel szinkronban tartandó --config lista
+      # pedig némán elcsúszhatott volna (a kapu másra nézett volna, mint a riport).
+      #
+      # CSAPDA, amiért ez python és nem egy `jq '.level == "error"'` egysoros:
+      # a Semgrep SARIF-jában az egyes results elemeken NINCS `level` mező (mérve:
+      # 14 találatból 0 esetben) — a súlyosság a szabálynál él,
+      # runs[].tool.driver.rules[].defaultConfiguration.level alatt. A results `level`-jét
+      # néző szűrő ezért MINDIG üres halmazt ad, és a kapu némán soha nem szólalna meg.
+      # Az ellenőrzés a ruleId-n keresztül oldja fel a szabály súlyosságát.
+      - name: Semgrep kapu (ERROR súlyosság)
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          with open("semgrep.sarif", encoding="utf-8") as f:
+              sarif = json.load(f)
+
+          hibak = []
+          osszes = 0
+          for run in sarif.get("runs", []):
+              szintek = {
+                  r["id"]: r.get("defaultConfiguration", {}).get("level", "warning")
+                  for r in run.get("tool", {}).get("driver", {}).get("rules", [])
+              }
+              for res in run.get("results", []):
+                  osszes += 1
+                  # A results-szintű level csak akkor van, ha a Semgrep kiírja; ha nincs,
+                  # a szabály alapértelmezett súlyossága dönt.
+                  szint = res.get("level") or szintek.get(res.get("ruleId"), "warning")
+                  if szint == "error":
+                      loc = res["locations"][0]["physicalLocation"]
+                      hibak.append(
+                          f'{loc["artifactLocation"]["uri"]}:'
+                          f'{loc["region"]["startLine"]} — {res.get("ruleId")}'
+                      )
+
+          print(f"Semgrep: {osszes} találat, ebből {len(hibak)} ERROR súlyosságú.")
+          for h in hibak:
+              print(f"::error::Semgrep ERROR: {h}")
+          sys.exit(1 if hibak else 0)
+          PY
+
+  # ---------------------------------------------------------------------------
+  # Titok-szkennelés: TruffleHog. A Semgrep `p/secrets` csomagja mintaalapú; a
+  # TruffleHog ezen felül VERIFIKÁL is (a talált kulcsot kipróbálja a szolgáltató
+  # API-ján), és nem csak a munkapéldányt, hanem a TELJES git-történetet nézi —
+  # egy már törölt, de commitolt kulcs továbbra is kiszivárgott kulcs.
+  #
+  # Ezért kell a fetch-depth: 0. A spec 7.6 szerint hitelesítő adat kizárólag
+  # környezetből jöhet, a server-java/.env pedig gitignore-olt — ez a job az,
+  # ami ezt a szabályt ténylegesen betartatja.
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Titok-szkennelés (TruffleHog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # teljes történet, nem csak a legutolsó commit
+
+      # Az action HARMADIK FÉL kódja, ami a mi checkoutolt repónkon fut, ezért
+      # commit-SHA-ra van rögzítve, nem `@main`-re: egy mozgó referenciánál az
+      # dönti el, mi fut a CI-ban, akinek push-joga van arra az ágra. A többi
+      # `uses:` (actions/checkout stb.) GitHub-sajátban maradhat lebegő tagen —
+      # ez az elfogadott kompromisszum, a third-party@main viszont ennek a
+      # mintának a legkockázatosabb formája.
+      #
+      # A verziót a záró komment tartja olvashatóan; a Dependabot SHA-ra rögzített
+      # actionöket is frissít, tehát a rögzítés nem jelent elavulást.
+      #
+      # SZÁNDÉKOS aszimmetria: az action `version` inputja alapértelmezésben
+      # `latest`, és az is marad. Az action KÓDJA rögzített, a szkennelő CLI
+      # DETEKTORAI viszont frissek: VÁLTOZATLAN kód mellett is jöhet új találat,
+      # ezt egy befagyasztott CLI elvenné. Erre épült a heti ütemezés is, ami
+      # 2026-08-20 óta KI VAN KAPCSOLVA — a friss detektorok haszna azóta csak
+      # kézzel indított körben (`workflow_dispatch`) jelentkezik.
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.96.0
+        with:
+          path: ./
+          # Üres base = a teljes git-történet átvizsgálása (nem csak egy diff).
+          base: ""
+          extra_args: --results=verified,unknown
+
+  # ---------------------------------------------------------------------------
+  # SCA: ismert sebezhetőségek a FÜGGŐSÉGEKBEN (OSV-adatbázis).
+  #
+  # A meglévő két biztonsági kör a MI kódunkat nézi: a Semgrep a forrást, a
+  # TruffleHog a titkokat. A harmadik féltől érkező csomagokat eddig SEMMI —
+  # ez a job zárja azt a rést.
+  #
+  # Egy körben nézi mind a HÁROM függőségi fát: a gyökér npm workspace-t, az
+  # `e2e/` külön projektjét és a Maven modult. Ez az egyetlen job, ami a repó két
+  # build-láncát szándékosan EGYÜTT kezeli — egy sebezhetőség nem tud arról, hogy
+  # itt a frontend és a backend között csak a HTTP-szerződés a kapcsolat.
+  #
+  # Ennek a jobnak legalább annyira lényege az ütemezett kör, mint a
+  # TruffleHognak, és ugyanazért: VÁLTOZATLAN kód mellett is jöhet új találat,
+  # mert nem a repó változik, hanem a sebezhetőség-adatbázis. A heti ütemezés
+  # 2026-08-20 óta KI VAN KAPCSOLVA, tehát egy új CVE mostantól addig nem derül
+  # ki, amíg valaki nem pusheol, PR-t nem nyit, vagy kézzel el nem indítja a
+  # workflow-t (`workflow_dispatch`).
+  #
+  # A KAPU SZÁNDÉKOSAN EGYSZERŰ: minden találat piros, súlyosság szerint NEM
+  # szűrünk. A Semgrep-kapunál leírt csapda itt is fenyeget — a súlyosság nem ott
+  # van, ahol az ember keresi (az OSV a CVSS-t vektorként adja, nem címkeként),
+  # egy félreírt szűrő pedig NÉMÁN soha nem szólalna meg. Ami tudatosan vállalt
+  # kivétel, az az `osv-scanner.toml`-ban van, ÍRÁSOS INDOKKAL és lejárati
+  # dátummal — nem a kapu logikájában elrejtve.
+  # ---------------------------------------------------------------------------
+  deps:
+    name: Függőség-sebezhetőség (OSV)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Harmadik fél kódja, ami a mi checkoutolt repónkon fut — a TruffleHoggal
+      # AZONOS okból commit-SHA-ra rögzítve, a verziót a záró komment tartja
+      # olvashatóan (lásd az ottani hosszabb indoklást). A rögzítés itt a
+      # szokásosnál is többet ér: az action READMÉ-je maga figyelmeztet, hogy a
+      # viselkedése "minor patch update"-ben is változhat.
+      #
+      # AZ ÚTVONAL VÉGÉN AZ ISMÉTLŐDÉS NEM ELÍRÁS. A repó GYÖKERÉBEN lévő
+      # `action.yml` egy csonk (csak `name`/`description`/`branding`, `runs:`
+      # szekció NÉLKÜL), a futtatható action az azonos nevű ALKÖNYVTÁRBAN van.
+      # A `google/osv-scanner-action@…` alak ezért nem indul el.
+      #
+      # A kapcsolókról, mindhárom MÉRVE a v2.4.0 binárison:
+      #  · --config    KELL. Enélkül a szkenner minden lockfile MELLETT külön
+      #                keres `osv-scanner.toml`-t, a miénk viszont egy darab, a
+      #                repó gyökerében — az `e2e/` és a `server-java/` fájáról a
+      #                kivételek nem érvényesülnének.
+      #  · --no-resolve  A pom.xml TRANZITÍV feloldását kapcsolja ki. Enélkül a
+      #                szkenner a Maven Centralt kérdezgeti (429-eket kaptunk), és
+      #                a mi pomunkon el is hasal: a Spring BOM-ból verzió nélkül
+      #                öröklő függőség "invalid empty constraint"-tel `Error
+      #                during extraction`-t okoz. Ára tudatosan vállalva: a Java
+      #                oldalon a DEKLARÁLT függőségek (14 csomag) látszanak, a
+      #                tranzitív fa nem. Az npm oldalt ez nem érinti — ott
+      #                teljes lockfile van, feloldani nincs mit.
+      #  · --skip-git  NINCS a v2-ben (az action alapértelmezett `scan-args`-a is
+      #                elhagyja). Ha mégis odakerül, a futás azonnal
+      #                "flag provided but not defined" hibával áll meg.
+      - name: OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            --no-resolve
+            --config=osv-scanner.toml
+            ./

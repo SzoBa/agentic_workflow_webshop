@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      content="#ffffff"
+      media="(prefers-color-scheme: light)"
+    />
+    <meta
+      name="theme-color"
+      content="#1b1c23"
+      media="(prefers-color-scheme: dark)"
+    />
+    <title>Mini Webshop</title>
+    <script>
+      // A téma beállítása MÉG AZ ELSŐ FESTÉS ELŐTT. Ha ezt a Reactre bíznánk,
+      // a sötét témát választó látogató egy villanásnyi fehér oldalt látna,
+      // amíg a köteg letöltődik és lefut.
+      //
+      // A szabálynak egyeznie kell a client/src/ui.tsx `resolveTheme`-jével.
+      // A duplikáció elkerülhetetlen (ennek minden köteg ELŐTT kell futnia),
+      // ezért nem megjegyzés őrzi, hanem mérés: e2e/features/tema.feature a
+      // kliens kötegét eldobva ellenőrzi ennek a scriptnek mindhárom ágát. Ha a
+      // két szabály széttart, az ott bukik el.
+      (function () {
+        try {
+          var valasztas = localStorage.getItem("webshop-theme");
+          if (valasztas !== "light" && valasztas !== "dark") {
+            valasztas = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          }
+          document.documentElement.dataset.theme = valasztas;
+        } catch (e) {
+          // Privát módban a localStorage olvasása dobhat; a világos téma a
+          // biztonságos alapértelmezés, a CSS enélkül is helyes.
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

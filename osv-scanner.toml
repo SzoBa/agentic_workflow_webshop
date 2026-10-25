@@ -1,0 +1,46 @@
+# Az OSV-Scanner (CI `deps` job) tudatosan figyelmen kívül hagyott találatai.
+#
+# A kapu maga szándékosan NEM súlyosság szerint szűr (az indoklás a
+# .github/workflows/ci.yml `deps` jobjánál van): ami itt nincs felsorolva, az
+# pirosra viszi a CI-t. Ide tehát CSAK írásos indokkal és lejárati dátummal
+# kerülhet bejegyzés.
+#
+# Az `ignoreUntil` nem formalitás: a dátum lejártával a találat MAGÁTÓL
+# visszatér, tehát egy kivétel nem tud csendben állandósulni. Ha a dátum lejár
+# és a csere még mindig nem történt meg, az tudatos döntést kíván — nem a dátum
+# néma kitolását.
+
+# --- react-router 6.x -------------------------------------------------------
+#
+# MIND A HÁROM találatnak UGYANAZ a gyökér-oka és ugyanaz a javítása: a
+# react-router 7.x ág. A kliens a 6.x-en áll (`client/package.json`:
+# `react-router-dom: ^6.28.1`), és a 6.x vonalon NINCS javított kiadás — a
+# legutolsó 6.30.4 is sebezhető (a GHSA-jjmj-jmhj-qwj2 kifejezetten
+# `last_affected: 6.30.4`-et mond, tehát nem is várható 6.x-es javítás).
+#
+# A javítás tehát FŐVERZIÓ-VÁLTÁS (6 → 7): önálló migrációs feladat, nem egy
+# lockfile-emelés — az `npm audit fix` épp ezért nem is nyúl hozzá. Amíg a
+# migráció meg nem történt, a három találat ismert és vállalt.
+#
+# ÉRDEMES TUDNI: a harmadikat (GHSA-jjmj-jmhj-qwj2) az `npm audit` NEM jelzi,
+# csak az OSV — a két adatbázis nem fedi egymást. Ez önmagában is indokolja,
+# hogy a CI ne pusztán `npm audit`-ot futtasson.
+
+[[IgnoredVulns]]
+id = "GHSA-wrjc-x8rr-h8h6"
+ignoreUntil = 2026-11-01
+reason = "react-router open redirect (<Link> / useNavigate, CVE-2025-68470 megkerülése). Csak a 7.17.1+ ág javítja, a kliens 6.x-en áll — főverzió-váltást igényel, lásd a fenti blokkot."
+
+[[IgnoredVulns]]
+id = "GHSA-337j-9hxr-rhxg"
+ignoreUntil = 2026-11-01
+reason = "react-router deserializeErrors() konstruktor-injekció. Ugyanaz a főverzió-váltás javítja. Ez az ág az SSR-hidratálást érinti, a kliens viszont CSR-only (nincs SSR, lásd CLAUDE.md) — a kitettség ezért itt elméleti, de a csomag akkor is cserére vár."
+
+# Ez a HÁROM közül a legsúlyosabb (CVSS 6.9), és a 6.x vonalon végleg javítatlan
+# marad: a javítás a react-router 7.13.0-ban van. A kitettség attól függ, jut-e
+# felhasználó által vezérelt érték átirányítási célként a `<Link>`/`useNavigate`
+# hívásokba — ezt a migráció előtt érdemes külön átnézni, nem a dátumra várva.
+[[IgnoredVulns]]
+id = "GHSA-jjmj-jmhj-qwj2"
+ignoreUntil = 2026-11-01
+reason = "react-router open redirect → XSS (CVE-2026-53668). A 6.x vonal VÉGLEG javítatlan (last_affected: 6.30.4); a javítás a 7.13.0-ban van, tehát ugyanaz a főverzió-váltás oldja meg, mint a másik kettőt."

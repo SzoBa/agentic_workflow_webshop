@@ -1,0 +1,428 @@
+/* Oldal-specifikus szabályok: ami CSAK egy képernyőn fordul elő. Ha egy elem
+ * másodszor is felbukkan máshol, a components.css-be költözik.
+ */
+
+/* ---------- Katalógus szűrő (az oldalsávban) ---------- */
+
+.filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.filter-panel .panel-head {
+  margin-bottom: 0;
+}
+
+.filter-panel .panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 0;
+}
+
+/* A találatszám a szűrő eredménye, ezért közvetlenül alatta áll. */
+.filter-result {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.filter-panel label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-normal);
+}
+
+.filter-panel label.checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.filter-panel .price-range {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.filter-panel .price-range label {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-panel .price-range input {
+  width: 100%;
+}
+
+/* A rács `auto-fill`-lel dolgozik, nem fix oszlopszámmal: így a kártya sosem
+   megy 15rem alá, és a törésponthoz nem kell külön médiakérdés. */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: var(--space-5);
+}
+
+/* A kártya képe önálló link, hogy a nagyítás a képre és ne a szövegre hasson. */
+.card-image {
+  display: block;
+  overflow: hidden;
+}
+
+/* ---------- Termék részletei ---------- */
+
+.detail-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.detail-content img {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+}
+
+.detail-main h1 {
+  margin-top: var(--space-2);
+}
+
+.detail-description {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-6);
+  /* Hosszú leírásnál a 70 karakter körüli sorhossz olvasható marad. */
+  max-width: 60ch;
+}
+
+/* Vásárlódoboz: ár, készlet, gomb egy helyen. Ragadós, hogy hosszú leírás
+   mellett se kelljen visszagörgetni érte. */
+.buy-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: sticky;
+  top: var(--space-16);
+  background: var(--color-surface-2);
+}
+
+.buy-box .price {
+  font-size: var(--text-2xl);
+}
+
+.buy-box button {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.stock {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Elfogyott termék: a kártya és a részletoldal ugyanazt a jelzést kapja, hogy
+   a két felület ne mondjon mást ugyanarról az állapotról. */
+.stock-empty {
+  color: var(--color-warning);
+  font-weight: var(--weight-semibold);
+}
+
+/* ---------- Értékelés (csillagok) ---------- */
+
+.rating {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.stars {
+  color: var(--color-star);
+  letter-spacing: 0.05em;
+}
+
+.rating-empty {
+  font-style: italic;
+  color: var(--color-text-faint);
+}
+
+/* ---------- Vélemények ---------- */
+
+.reviews {
+  margin-top: var(--space-12);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-8);
+}
+
+.review-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.review {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+
+.review-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.review p {
+  margin: var(--space-2) 0 0;
+}
+
+.review-thanks {
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+/* ---------- Értékelő űrlap ---------- */
+
+.review-form h3 {
+  margin: 0;
+}
+
+.star-input {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.star-input legend {
+  font-weight: var(--weight-semibold);
+  font-size: var(--text-sm);
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+
+/* A csillagok egy sorban, egymás mellett állnak.
+   A `.form-stack` prefix nem díszítés: a `.form-stack label` szabály (0,2,0)
+   erősebb, mint a puszta `.star-option` (0,1,0), ezért nélküle az ottani
+   `flex-direction: column` nyerne, és a csillagok egymás alá kerülnének. Emiatt
+   a `flex-direction`-t és a `gap`-et is kiírjuk — az öröklődés helyett. */
+.form-stack .star-option {
+  display: inline-flex;
+  flex-direction: row;
+  gap: 0;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1.7rem;
+  line-height: 1;
+  color: var(--color-star);
+}
+
+/* A rádiógomb maga rejtett — a kattintható felület a csillag (a label).
+   A prefix itt is kell: a `.form-stack input` szabály ugyanolyan erős, de
+   később áll, így nélküle a paddingje egy láthatatlan kattintható foltot hagyna
+   a csillagsoron. */
+.form-stack .star-option input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: none;
+}
+
+/* Billentyűzetes navigáció: a rejtett rádiógomb fókuszát a csillagon jelezzük. */
+.star-option:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Kosár ---------- */
+
+.cart-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+}
+
+.total {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* ---------- Rendeléseim ---------- */
+
+.order-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
+  box-shadow: var(--shadow-1);
+}
+
+.order-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.order-head code {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+
+.order-card .total {
+  margin-top: var(--space-4);
+}
+
+/* A lejárt rendelés kártyája hangsúlyt kap: a vevőnek észre kell vennie, hogy
+   a foglalása megszűnt, és van teendője. */
+.order-expired {
+  border-left: 4px solid var(--color-warning);
+}
+
+.reservation {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.reservation-expired {
+  color: var(--color-warning);
+}
+
+/* ---------- Belépés / regisztráció ---------- */
+
+/* Két hasábnyi széles oldalon egy 460px-es űrlap elveszne a bal szélen, ezért
+   a beléptető oldalak vízszintesen középre kerülnek. */
+.auth-page {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-8);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 28rem;
+  padding: var(--space-8);
+}
+
+.auth-card .form-stack {
+  max-width: none;
+}
+
+.auth-card button[type="submit"] {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+}
+
+.auth-alt {
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ---------- Adataim (saját fiók) ---------- */
+
+/* A két űrlap egymás alatt, a Pénztárral azonos sorhosszal: teljes szélességű
+   panelban a mezők olvashatatlanul hosszúra nyúlnának. */
+.profile-panel {
+  max-width: 34rem;
+  margin-bottom: var(--space-6);
+}
+
+.profile-panel h2 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-lg);
+}
+
+/* Sikerjelzés űrlap után. Ugyanaz a zöld hang, mint a vélemény
+   visszaigazolásánál (.review-thanks) — a felhasználó ugyanazt jelenti: kész. */
+.form-success {
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin: 0;
+}
+
+/* ---------- Pénztár és admin szerkesztő ---------- */
+
+.checkout-panel,
+.editor-panel {
+  max-width: 34rem;
+  margin-bottom: var(--space-6);
+}
+
+/* ---------- Admin ---------- */
+
+/* Másodlagos sorok a vevő cellájában: a leadáskori e-mail és a fiók mai neve.
+   A `customer` a leadáskori MÁSOLAT, a `username` a fiók MAI neve — a kettő
+   eltérhet, ezért látszik külön, halványabban. */
+.admin-order-email,
+.admin-order-username {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.confirmation code {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- Töréspontok ---------- */
+
+@media (max-width: 640px) {
+  .detail-content {
+    grid-template-columns: 1fr;
+  }
+}
