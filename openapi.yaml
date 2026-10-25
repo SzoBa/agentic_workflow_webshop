@@ -1,0 +1,1079 @@
+openapi: 3.1.0
+
+info:
+  title: Mini Webshop API
+  version: 1.0.0
+  description: |
+    A webshop backend HTTP-szerződése: katalógus, kosárból leadott rendelés,
+    értékelések és adminisztráció.
+
+    **Hibaválasz.** Minden hiba alakja `{ "error": "<magyar szöveg>" }`. A szövegek
+    magyarul, a felhasználónak megmutatható formában érkeznek, és soha nem tartalmaznak
+    belső azonosítót, jelszóhasht, tokent vagy verem-információt. Kezeletlen hiba esetén
+    a válasz 500 `{ "error": "Váratlan szerverhiba." }`.
+
+    **Pénznem.** Minden ár egész szám, forintban (HUF) — tizedesjegy nincs.
+
+    **Hitelesítés.** `Authorization: Bearer <token>`. A tokent a regisztráció, a
+    bejelentkezés és a jelszócsere válasza adja; ez a három az egyetlen hely, ahol token
+    válaszba kerül.
+
+    **Készlet.** A rendelés leadása nem csökkenti a `stock` mezőt, hanem foglalást hoz
+    létre. Azt, hogy egy termékből mennyi vehető meg, az `available` mondja meg
+    (`stock` mínusz az aktív foglalások), nem a `stock`.
+
+    **Null mezők.** A `null` értékű mezők kimaradnak a válaszból, nem `null`-ként
+    szerepelnek.
+
+servers:
+  - url: /
+    description: >-
+      Relatív: ugyanaz az eredet, ahonnan a kliens betöltődött. Fejlesztésben a Vite
+      dev szerver proxyzza az /api kéréseket a backendre; élesben ugyanaz a szerver
+      szolgálja ki a lefordított klienst és az API-t.
+
+tags:
+  - name: katalógus
+    description: Vásárlói termékvégpontok — nyilvános, csak aktív termék.
+  - name: hitelesítés
+    description: Regisztráció, bejelentkezés, saját profil, jelszócsere.
+  - name: rendelés
+    description: Rendelés leadása és a saját rendelések listája.
+  - name: értékelés
+    description: Publikus értékelés-olvasás és beküldés.
+  - name: admin
+    description: >-
+      Az /api/admin névtér. Minden végpontja hitelesítést ÉS admin szerepkört igényel:
+      token nélkül 401, nem admin tokennel 403.
+  - name: üzemeltetés
+    description: Health-check.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/health:
+    get:
+      tags: [üzemeltetés]
+      summary: Health-check
+      security: []
+      responses:
+        "200":
+          description: A szerver fogad kéréseket.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+
+  /api/products:
+    get:
+      tags: [katalógus]
+      summary: Aktív termékek lapozott, szűrhető listája
+      description: >-
+        Kizárólag aktív termékeket ad vissza, értékelési átlaggal és a megvehető
+        mennyiséggel. Alap lapméret 12.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { $ref: "#/components/parameters/Category" }
+        - { $ref: "#/components/parameters/MinPrice" }
+        - { $ref: "#/components/parameters/MaxPrice" }
+        - { $ref: "#/components/parameters/Search" }
+        - name: inStock
+          in: query
+          description: Ha `true`, csak a megvehető (available > 0) termékek.
+          schema: { type: string }
+      responses:
+        "200":
+          description: A találati oldal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VasarloiTermekOldal" }
+
+  /api/products/{id}:
+    get:
+      tags: [katalógus]
+      summary: Egy aktív termék
+      description: >-
+        Az inaktív termék ugyanazt a 404-et kapja, mint a nem létező — a válaszból nem
+        derülhet ki, hogy a termék létezik-e.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/TermekId" }
+      responses:
+        "200":
+          description: A termék.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VasarloiTermek" }
+        "404":
+          $ref: "#/components/responses/TermekNemTalalhato"
+
+  /api/products/{id}/reviews:
+    get:
+      tags: [értékelés]
+      summary: A termék jóváhagyott értékelései
+      description: >-
+        Publikus lista, a szerző azonosítója nélkül. Csak a jóváhagyott (`approved`)
+        értékelések szerepelnek benne.
+      security: []
+      parameters:
+        - { $ref: "#/components/parameters/TermekId" }
+      responses:
+        "200":
+          description: Az értékelések listája.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublikusErtekeles" }
+        "404":
+          $ref: "#/components/responses/TermekNemTalalhato"
+
+  /api/reviews:
+    post:
+      tags: [értékelés]
+      summary: Értékelés beküldése
+      description: >-
+        Csak ellenőrzött vásárló értékelhet: akinek van olyan kiszállított rendelése,
+        amely tartalmazza a terméket. Egy felhasználó egy terméket egyszer értékelhet.
+        A beküldött értékelés `pending` moderációs státuszú, és nem publikus.
+        A törzsben küldött `author` mezőt a szerver figyelmen kívül hagyja — a szerző
+        mindig a token gazdája.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, rating]
+              properties:
+                productId: { type: string }
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                body:
+                  type: string
+                  maxLength: 500
+                  description: Opcionális szöveges vélemény.
+      responses:
+        "201":
+          description: Az értékelés elmentve.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ertekeles" }
+        "400":
+          description: |
+            Érvénytelen értékelés. Lehetséges szövegek:
+            `Az értékelés 1 és 5 közötti egész szám lehet.` ·
+            `A szöveges vélemény csak szöveg lehet.`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+        "403":
+          description: "Nem ellenőrzött vásárló."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "404":
+          $ref: "#/components/responses/TermekNemTalalhato"
+        "409":
+          description: "`Ezt a terméket már értékelted.`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/auth/register:
+    post:
+      tags: [hitelesítés]
+      summary: Regisztráció
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, address, password]
+              properties:
+                username: { type: string, minLength: 8, maxLength: 50 }
+                email: { type: string, format: email }
+                address: { type: string }
+                password: { type: string, minLength: 8, format: password }
+      responses:
+        "201":
+          description: A fiók létrejött, a válasz munkamenet-tokent hoz.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HitelesitesiValasz" }
+        "400":
+          description: |
+            Validációs hiba. Lehetséges szövegek:
+            `A felhasználónév legalább 8 karakter legyen.` ·
+            `A felhasználónév legfeljebb 50 karakter lehet.` ·
+            `Érvénytelen email cím.` · `A szállítási cím megadása kötelező.` ·
+            `A jelszó legalább 8 karakter legyen.` · `Ez a felhasználónév már foglalt.` ·
+            `Ezzel az email címmel már regisztráltak.`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/auth/login:
+    post:
+      tags: [hitelesítés]
+      summary: Bejelentkezés
+      description: >-
+        IP-nkénti rate limiting véd. A korlát adatbázisban tárolt, ezért túléli az
+        újraindítást.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        "200":
+          description: Sikeres belépés, a válasz munkamenet-tokent hoz.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HitelesitesiValasz" }
+        "401":
+          description: >-
+            `Hibás felhasználónév vagy jelszó.` — ugyanaz a válasz ismeretlen
+            felhasználónévre és rossz jelszóra.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "429":
+          description: Túl sok sikertelen próbálkozás erről az IP-ről.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/auth/logout:
+    post:
+      tags: [hitelesítés]
+      summary: Kijelentkezés
+      description: A munkamenet-token érvénytelenné válik.
+      responses:
+        "200":
+          $ref: "#/components/responses/Rendben"
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+
+  /api/auth/me:
+    get:
+      tags: [hitelesítés]
+      summary: A belépett felhasználó publikus adatai
+      responses:
+        "200":
+          description: A saját fiók.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublikusFelhasznalo" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+    put:
+      tags: [hitelesítés]
+      summary: A saját fiókadatok mentése
+      description: >-
+        A módosítandó felhasználó mindig a tokenből jön; a törzsben küldött azonosítót és
+        szerepkört a szerver nem veszi figyelembe. A mentéshez a jelenlegi jelszó kell.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword]
+              properties:
+                currentPassword: { type: string, format: password }
+                username: { type: string, minLength: 8, maxLength: 50 }
+                email: { type: string, format: email }
+                address: { type: string }
+      responses:
+        "200":
+          description: A mentett fiók.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublikusFelhasznalo" }
+        "400":
+          description: |
+            Validációs hiba — ugyanazok a szövegek, mint a regisztrációnál, illetve
+            `A jelenlegi jelszó hibás.`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+        "429":
+          description: Túl sok sikertelen jelszó-ellenőrzés erről az IP-ről.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/auth/password:
+    post:
+      tags: [hitelesítés]
+      summary: Jelszócsere
+      description: A válasz ÚJ munkamenet-tokent hoz — a régi érvénytelenné válik.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword, newPasswordConfirm]
+              properties:
+                currentPassword: { type: string, format: password }
+                newPassword: { type: string, minLength: 8, format: password }
+                newPasswordConfirm: { type: string, format: password }
+      responses:
+        "200":
+          description: A jelszó megváltozott, a válasz új tokent hoz.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HitelesitesiValasz" }
+        "400":
+          description: |
+            Lehetséges szövegek: `A jelenlegi jelszó hibás.` · `A két jelszó nem egyezik.` ·
+            `A jelszó legalább 8 karakter legyen.`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+        "429":
+          description: Túl sok sikertelen jelszó-ellenőrzés erről az IP-ről.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/orders:
+    get:
+      tags: [rendelés]
+      summary: A saját leadott rendelések
+      responses:
+        "200":
+          description: A felhasználó rendelései.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Rendeles" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+    post:
+      tags: [rendelés]
+      summary: Rendelés leadása
+      description: >-
+        A szerver a végösszeget az adatbázisbeli árakból ÚJRASZÁMOLJA — a kliens által
+        küldött árat sosem fogadja el. Az `expectedTotal` a képernyőn jóváhagyott
+        végösszeg: ha eltér a szerver számolt összegétől, a rendelés elutasításra kerül,
+        hogy a vevő soha ne fizessen mást, mint amit látott. A leadás nem csökkenti a
+        készletet, hanem foglalást hoz létre.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items, customer, expectedTotal]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [productId, quantity]
+                    properties:
+                      productId: { type: string }
+                      quantity: { type: integer, minimum: 1 }
+                customer: { $ref: "#/components/schemas/VevoiAdatok" }
+                expectedTotal:
+                  type: integer
+                  description: A vevő által jóváhagyott végösszeg, forintban.
+      responses:
+        "201":
+          description: A rendelés rögzítve, `pending` státusszal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rendeles" }
+        "400":
+          description: |
+            Lehetséges szövegek: `A kosár üres vagy hibás.` ·
+            `Hiányzó vevői adatok (név, email, cím).` ·
+            `A jóváhagyott végösszeg megadása kötelező.`, továbbá a nem elérhető termékre
+            és az érvénytelen mennyiségre vonatkozó, terméknevet tartalmazó üzenetek.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401":
+          $ref: "#/components/responses/BejelentkezesSzukseges"
+        "409":
+          description: >-
+            Ütközés: nincs elég fedezet valamelyik tételre, vagy a jóváhagyott végösszeg
+            eltér a szerver által számolttól. Fedezethiány esetén a készletről szóló
+            üzenet megy vissza, nem az árról.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/admin/products:
+    get:
+      tags: [admin]
+      summary: A teljes katalógus, az inaktívakkal együtt
+      description: Alap lapméret 25. Foglalási adatokat is ad, értékelési átlagot nem.
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - { $ref: "#/components/parameters/Category" }
+        - { $ref: "#/components/parameters/MinPrice" }
+        - { $ref: "#/components/parameters/MaxPrice" }
+        - { $ref: "#/components/parameters/Search" }
+        - name: status
+          in: query
+          description: Aktivitás szerinti szűrés.
+          schema: { type: string }
+      responses:
+        "200":
+          description: A találati oldal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminTermekOldal" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+    post:
+      tags: [admin]
+      summary: Új termék
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TermekBemenet" }
+      responses:
+        "201":
+          description: A termék létrejött.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Termek" }
+        "400": { $ref: "#/components/responses/TermekValidaciosHiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+
+  /api/admin/products/{id}:
+    put:
+      tags: [admin]
+      summary: Termék módosítása (teljes csere)
+      parameters:
+        - { $ref: "#/components/parameters/TermekId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TermekBemenet" }
+      responses:
+        "200":
+          description: A mentett termék.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Termek" }
+        "400": { $ref: "#/components/responses/TermekValidaciosHiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404": { $ref: "#/components/responses/TermekNemTalalhato" }
+    delete:
+      tags: [admin]
+      summary: Termék végleges törlése
+      description: A korábbi rendelések tartalmát nem érinti — azok snapshotot őriznek.
+      parameters:
+        - { $ref: "#/components/parameters/TermekId" }
+      responses:
+        "200": { $ref: "#/components/responses/Rendben" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404": { $ref: "#/components/responses/TermekNemTalalhato" }
+
+  /api/admin/products/{id}/active:
+    patch:
+      tags: [admin]
+      summary: Csak az aktivitás váltása
+      description: A többi mező validálása nélkül.
+      parameters:
+        - { $ref: "#/components/parameters/TermekId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties:
+                active: { type: boolean }
+      responses:
+        "200":
+          description: A mentett termék.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Termek" }
+        "400":
+          description: "`Az aktivitási állapot csak igaz vagy hamis lehet.`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404": { $ref: "#/components/responses/TermekNemTalalhato" }
+
+  /api/admin/users:
+    get:
+      tags: [admin]
+      summary: Felhasználók listája
+      description: Jelszóhash és token semmilyen válaszban nem szerepel.
+      responses:
+        "200":
+          description: A felhasználók.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminFelhasznalo" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+
+  /api/admin/users/{id}:
+    put:
+      tags: [admin]
+      summary: Felhasználó módosítása
+      parameters:
+        - { $ref: "#/components/parameters/AzonositoId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username: { type: string, minLength: 8, maxLength: 50 }
+                email: { type: string, format: email }
+                address: { type: string }
+                role: { $ref: "#/components/schemas/Szerepkor" }
+      responses:
+        "200":
+          description: A mentett felhasználó.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminFelhasznalo" }
+        "400":
+          description: >-
+            Validációs hiba, vagy az utolsó admin szerepkörének elvétele — a rendszer
+            nem maradhat admin nélkül.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404": { $ref: "#/components/responses/FelhasznaloNemTalalhato" }
+    delete:
+      tags: [admin]
+      summary: Felhasználó törlése
+      description: A rendelései megmaradnak — a rendelés önálló bizonylat.
+      parameters:
+        - { $ref: "#/components/parameters/AzonositoId" }
+      responses:
+        "200": { $ref: "#/components/responses/Rendben" }
+        "400":
+          description: Az utolsó admin nem törölhető.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404": { $ref: "#/components/responses/FelhasznaloNemTalalhato" }
+
+  /api/admin/reviews:
+    get:
+      tags: [admin]
+      summary: Értékelések moderáláshoz
+      description: >-
+        Teljes rekordok, a szerzővel együtt — a szerző azonosítója a moderátor
+        munkaeszköze.
+      parameters:
+        - name: status
+          in: query
+          description: Moderációs státusz szerinti szűrés.
+          schema: { $ref: "#/components/schemas/ErtekelesStatusz" }
+      responses:
+        "200":
+          description: Az értékelések.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Ertekeles" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+
+  /api/admin/reviews/{id}:
+    patch:
+      tags: [admin]
+      summary: Moderációs státusz beállítása
+      description: A `removed` soft delete — az értékelés az adatbázisban megmarad.
+      parameters:
+        - { $ref: "#/components/parameters/AzonositoId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [approved, rejected, removed]
+      responses:
+        "200":
+          description: A módosított értékelés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Ertekeles" }
+        "400":
+          description: Érvénytelen moderációs státusz.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404":
+          description: "`Az értékelés nem található.`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+  /api/admin/orders:
+    get:
+      tags: [admin]
+      summary: A teljes rendeléshalmaz, legújabb elöl
+      description: >-
+        Alap lapméret 25. A query paraméterek értelmezése a szerződés része: egy elgépelt
+        `page` az első oldalt adja, nem hibát, egy ismeretlen `status` pedig a teljes
+        halmazt.
+      parameters:
+        - { $ref: "#/components/parameters/Page" }
+        - { $ref: "#/components/parameters/PageSize" }
+        - name: status
+          in: query
+          description: Teljesítési státusz szerinti szűrés.
+          schema: { $ref: "#/components/schemas/RendelesStatusz" }
+        - { $ref: "#/components/parameters/Search" }
+      responses:
+        "200":
+          description: A találati oldal.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminRendelesOldal" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+
+  /api/admin/orders/{id}/status:
+    patch:
+      tags: [admin]
+      summary: Teljesítési státusz beállítása
+      description: >-
+        A `delivered` az egyetlen mód arra, hogy egy rendelés kiszállítottá váljon — enélkül
+        senki nem írhatna értékelést. A kiszállított és a lejárt állapotból nincs
+        visszalépés. A készlet a `delivered`-re váltáskor csökken.
+      parameters:
+        - { $ref: "#/components/parameters/AzonositoId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { $ref: "#/components/schemas/RendelesStatusz" }
+      responses:
+        "200":
+          description: A módosított rendelés.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Rendeles" }
+        "400":
+          description: Érvénytelen státuszérték.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "401": { $ref: "#/components/responses/BejelentkezesSzukseges" }
+        "403": { $ref: "#/components/responses/AdminJogosultsagSzukseges" }
+        "404":
+          description: "`A rendelés nem található.`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+        "409":
+          description: >-
+            Tiltott állapotátmenet (a kiszállított és a lejárt végállapot), vagy a
+            kiszállításhoz nincs elég készlet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Hiba" }
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "`Authorization: Bearer <token>`"
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: Az oldal sorszáma (1-től). Nem szám érték esetén az első oldal.
+      schema: { type: string }
+    PageSize:
+      name: pageSize
+      in: query
+      description: Oldalméret. Nem szám érték esetén az alapértelmezett.
+      schema: { type: string }
+    Category:
+      name: category
+      in: query
+      description: Kategória szerinti szűrés.
+      schema: { type: string }
+    MinPrice:
+      name: minPrice
+      in: query
+      description: Alsó árhatár, forintban.
+      schema: { type: string }
+    MaxPrice:
+      name: maxPrice
+      in: query
+      description: Felső árhatár, forintban.
+      schema: { type: string }
+    Search:
+      name: search
+      in: query
+      description: Szabad szavas keresés.
+      schema: { type: string }
+    TermekId:
+      name: id
+      in: path
+      required: true
+      description: A termék azonosítója.
+      schema: { type: string }
+    AzonositoId:
+      name: id
+      in: path
+      required: true
+      description: Az erőforrás azonosítója.
+      schema: { type: string }
+
+  responses:
+    Rendben:
+      description: A művelet sikerült.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [ok]
+            properties:
+              ok: { type: boolean, const: true }
+    BejelentkezesSzukseges:
+      description: >-
+        `Bejelentkezés szükséges.` — hiányzó, ismeretlen, üres vagy lejárt token.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hiba" }
+    AdminJogosultsagSzukseges:
+      description: >-
+        `Ehhez adminisztrátori jogosultság szükséges.` — érvényes token, de nem admin
+        szerepkör.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hiba" }
+    TermekNemTalalhato:
+      description: "`A termék nem található.`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hiba" }
+    FelhasznaloNemTalalhato:
+      description: "`A felhasználó nem található.`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hiba" }
+    TermekValidaciosHiba:
+      description: >-
+        Termékvalidációs hiba. A validáció az ELSŐ hibás mezőnél megáll, tehát egyszerre
+        egy üzenet érkezik: `A termék neve kötelező.` ·
+        `A termék neve legfeljebb 50 karakter lehet.` · `A termék leírása kötelező.` ·
+        `A termék leírása legfeljebb 100 karakter lehet.` ·
+        `Az ár egész szám és nullánál nagyobb legyen.` ·
+        `A készlet megadása kötelező, egész szám és nem negatív.` ·
+        `A kategória megadása kötelező.` · `A kép megadása kötelező.` ·
+        `A kép hivatkozása érvényes http vagy https URL legyen.` ·
+        `Az aktivitási állapot csak igaz vagy hamis lehet.`
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Hiba" }
+
+  schemas:
+
+    Hiba:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Magyar nyelvű, a felhasználónak megmutatható hibaszöveg.
+      examples:
+        - { error: "A termék nem található." }
+
+    Szerepkor:
+      type: string
+      enum: [customer, admin]
+
+    RendelesStatusz:
+      type: string
+      enum: [pending, expired, delivered]
+
+    ErtekelesStatusz:
+      type: string
+      enum: [pending, approved, rejected, removed]
+
+    Termek:
+      description: A termék tárolt mezői, számolt mező nélkül.
+      type: object
+      required: [id, name, description, price, imageUrl, stock, category, active]
+      properties:
+        id: { type: string }
+        name: { type: string, maxLength: 50 }
+        description: { type: string, maxLength: 100 }
+        price: { type: integer, description: "Egész forint." }
+        imageUrl: { type: string }
+        stock:
+          type: integer
+          description: >-
+            A raktárkészlet. NEM ez mondja meg, mennyi vehető meg — arra az `available`
+            való.
+        category: { type: string }
+        active: { type: boolean }
+
+    TermekBemenet:
+      type: object
+      required: [name, description, price, imageUrl, stock, category]
+      properties:
+        name: { type: string, maxLength: 50 }
+        description: { type: string, maxLength: 100 }
+        price: { type: integer, minimum: 1 }
+        imageUrl: { type: string, description: "Érvényes http vagy https URL." }
+        stock: { type: integer, minimum: 0 }
+        category: { type: string }
+        active: { type: boolean }
+
+    VasarloiTermek:
+      description: A termék mezői + a három számolt mező.
+      allOf:
+        - { $ref: "#/components/schemas/Termek" }
+        - type: object
+          required: [ratingAvg, ratingCount, available]
+          properties:
+            ratingAvg:
+              type: number
+              description: >-
+                A jóváhagyott értékelések átlaga, egy tizedesre kerekítve. Egész értéknél
+                tizedes nélkül szerepel (`4`, nem `4.0`) — ez az alak a szerződés része.
+                Értékelés hiányában `0`.
+            ratingCount:
+              type: integer
+              description: A jóváhagyott értékelések száma.
+            available:
+              type: integer
+              description: >-
+                A megvehető mennyiség: a készlet mínusz az aktív foglalások. A pénztárnál
+                ez dönt.
+
+    AdminTermek:
+      description: A termék mezői + a foglalási adatok. Értékelési átlagot nem hordoz.
+      allOf:
+        - { $ref: "#/components/schemas/Termek" }
+        - type: object
+          required: [reserved, available]
+          properties:
+            reserved:
+              type: integer
+              description: Az aktív foglalások mennyisége.
+            available:
+              type: integer
+              description: A megvehető mennyiség.
+
+    VasarloiTermekOldal:
+      type: object
+      required: [items, total, page, pageSize, totalPages, categories]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/VasarloiTermek" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+        categories:
+          type: array
+          items: { type: string }
+          description: >-
+            A SZŰRETLEN halmaz kategórialistája, hogy a szűrő a szűrés után is teljes
+            maradjon.
+
+    AdminTermekOldal:
+      type: object
+      required: [items, total, page, pageSize, totalPages, categories]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminTermek" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+        categories:
+          type: array
+          items: { type: string }
+
+    PublikusFelhasznalo:
+      description: Jelszóhash és munkamenet-token soha nem szerepel benne.
+      type: object
+      required: [id, username, email, address, role]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        email: { type: string, format: email }
+        address: { type: string }
+        role: { $ref: "#/components/schemas/Szerepkor" }
+
+    AdminFelhasznalo:
+      allOf:
+        - { $ref: "#/components/schemas/PublikusFelhasznalo" }
+        - type: object
+          required: [createdAt]
+          properties:
+            createdAt: { type: string, format: date-time }
+
+    HitelesitesiValasz:
+      type: object
+      required: [user, token]
+      properties:
+        user: { $ref: "#/components/schemas/PublikusFelhasznalo" }
+        token:
+          type: string
+          description: >-
+            Munkamenet-token. A szerver csak a lenyomatát tárolja; a nyers érték kizárólag
+            ebben a válaszban létezik.
+
+    VevoiAdatok:
+      type: object
+      required: [name, email, address]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        address: { type: string }
+
+    RendelesTetel:
+      description: >-
+        A `name` és a `unitPrice` a leadáskori állapot MÁSOLATA, nem hivatkozás — egy
+        korábbi rendelés tartalma akkor sem változik, ha a terméket később átnevezik,
+        átárazzák vagy törlik.
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        name: { type: string }
+        unitPrice: { type: integer, description: "Egész forint, a leadáskori ár." }
+
+    Rendeles:
+      type: object
+      required: [id, items, customer, total, createdAt, status]
+      properties:
+        id: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/RendelesTetel" }
+        customer: { $ref: "#/components/schemas/VevoiAdatok" }
+        total: { type: integer, description: "A szerver által számolt végösszeg, forintban." }
+        createdAt: { type: string, format: date-time }
+        userId:
+          type: string
+          description: A leadó azonosítója. Nem idegen kulcs — a rendelés önálló bizonylat.
+        status: { $ref: "#/components/schemas/RendelesStatusz" }
+        reservedUntil:
+          type: string
+          format: date-time
+          description: Eddig tartja a foglalás a készletet.
+
+    AdminRendeles:
+      allOf:
+        - { $ref: "#/components/schemas/Rendeles" }
+        - type: object
+          properties:
+            username:
+              type: string
+              description: A leadó felhasználóneve, ha a fiók még létezik.
+
+    AdminRendelesOldal:
+      type: object
+      required: [items, total, page, pageSize, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AdminRendeles" }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+
+    PublikusErtekeles:
+      description: >-
+        A publikus nézet, szerző NÉLKÜL — a beküldő személye soha nem kerül ki a publikus
+        listára.
+      type: object
+      required: [id, productId, rating, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        body: { type: string, maxLength: 500 }
+        status: { $ref: "#/components/schemas/ErtekelesStatusz" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    Ertekeles:
+      description: >-
+        A teljes rekord, a szerzővel. A beküldés válasza és a moderációs lista adja —
+        a publikus listára nem kerül ki.
+      allOf:
+        - { $ref: "#/components/schemas/PublikusErtekeles" }
+        - type: object
+          required: [author]
+          properties:
+            author:
+              type: string
+              description: A szerző azonosítója; mindig a tokenből származik.

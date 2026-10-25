@@ -1,0 +1,23 @@
+# Sorvégek. A repóban MINDEN szövegfájl LF-fel tárolódik; a munkakönyvtárban
+# lévő alak fájltípusonként dől el — függetlenül attól, ki hogyan állította be a
+# core.autocrlf-et. Enélkül a checkout eredménye gépenként más volt.
+* text=auto
+
+# A cmd.exe a batch-fájlt SORONKÉNT, OEM kódlapon olvassa: LF sorvégekkel
+# elromlik az értelmezés. A start.cmd-nek ezért minden platformon CRLF-fel kell
+# kikerülnie a munkakönyvtárba (lásd CLAUDE.md, "Commands").
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# A shell-szkriptek ennek a fordítottja: CRLF-fel a bash "\r: command not found"
+# hibával áll meg, ezért ezek mindig LF-esek — Windowson is.
+*.sh text eol=lf
+
+# Bináris állományok: se sorvég-, se diff-kezelés.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.jar binary

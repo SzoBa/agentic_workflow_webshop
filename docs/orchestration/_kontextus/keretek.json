@@ -1,0 +1,27 @@
+{
+  "verzio": 1,
+  "kalibralva": "2026-08-04",
+  "alap": "Az `admin-orders` futás VISSZAMENŐLEG MÉRT adata: 5 delegálás, 6 933 376 költség-egység, ≈34,67 USD, 62 perc subagent-idő. A keret ennek nagyjából a háromszorosa, mert egy teljes `feature-full` lánc ennél többet csinál (spec, e2e-ág, unit-teszt kör). A küszöb tehát mért számból származik, nem találomra.",
+  "suly": {
+    "be": 1,
+    "ki": 5,
+    "cache_ir_5m": 1.25,
+    "cache_ir_1h": 2,
+    "cache_olv": 0.1
+  },
+  "keret": {
+    "koltseg_egyseg": 25000000,
+    "koltseg_usd": 120
+  },
+  "konvergencia": true,
+  "oszcillacio": true,
+  "kor_korlat": null,
+  "validator_agentek": ["spec-validator"],
+  "javito_agentek": ["spec-implementer", "e2e-test-writer"],
+  "megjegyzes": [
+    "`kor_korlat` szándékosan `null` = kikapcsolva. A „legfeljebb 2 javító kör\" korlátot ma a `feature-implement` prózája tartja; a hely azért van meg, hogy egy döntés bekapcsolhassa kódírás nélkül.",
+    "A `keret` mindkét ága él: amelyik előbb telik be, az tilt. Ismeretlen modellnél nincs USD, olyankor a költség-egység az egyetlen kapu.",
+    "A `suly` FELTEVÉS (az Anthropic szokásos arányai), nem mérés — ezért írható át egy helyen.",
+    "Ha a kapu bekattan, a küszöböt NEM lejjebb visszük: a kapu azt mondja, hogy a futás elszaladt. Ugyanaz az elv, mint a JaCoCo 90%-os áglefedettségi kapunál."
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "gmail-digital-twin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Gmail users.messages.send viselkedési klónja (MSW + natív HTTP) a digital-twin.md alapján",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node http-server.mjs --port 8089"
+  },
+  "devDependencies": {
+    "msw": "^2.7.0"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "verzio": 2,
+  "ervenyes": "2026-10-25",
+  "penznem": "USD",
+  "forras": "A `claude-api` skill ártáblája (a skill gyorsítótára 2026-10-06-i, Claude Code 2.1.310). Nem mérés: levezetett adat, ezért minden kiírt összeg mellett ott a fájl és ez a dátum.",
+  "megjegyzes": [
+    "A `be_millio` / `ki_millio` az input és output ára millió tokenenként.",
+    "A cache szorzói alapból a kódban vannak (`futas-kozos.mjs`): olvasás 0,1x, írás 1,25x (5 perces TTL) és 2x (1 órás TTL) az input árához képest. Ahol a modell ettől eltér, a sor `cache_olv_millio` / `cache_ir_5m_millio` / `cache_ir_1h_millio` mezője felülírja.",
+    "Az Opus 5.5 cache-olvasása a forrás szerint 0,20 USD (0,05x), a Fable 5.1-é 0,25 USD (0,025x) — ezért van felülírva. A cache-írás szorzóját a forrás egyik új modellnél sem mondja ki külön, ott a szokásos 1,25x/2x marad: ez feltevés.",
+    "A Sonnet 5 a 2026-08-04-i táblában 3/15 volt (a 2/10 akkor bevezető árnak számított, 2026-08-31-ig). A 2026-10-06-i forrás a 2/10-et rendes árként közli, ezért most az szerepel.",
+    "A Haiku 5.5 ára 100K tokenes promptig 0,10/0,50, fölötte 0,50/2,50. SZÁNDÉKOSAN a magasabbat írjuk ide: egy keretnek felfelé kell tévednie, nem lefelé.",
+    "Ismeretlen modellre a mérleg NEM ír pénzt — a hiányzó ár nem ingyenes delegálás. Olyankor a relatív költség-egység marad az egyetlen szám."
+  ],
+  "modellek": {
+    "claude-fable-5-1": { "be_millio": 10, "ki_millio": 50, "cache_olv_millio": 0.25 },
+    "claude-fable-5": { "be_millio": 10, "ki_millio": 50 },
+    "claude-mythos-5-1": { "be_millio": 10, "ki_millio": 50, "cache_olv_millio": 0.25 },
+    "claude-mythos-5": { "be_millio": 10, "ki_millio": 50 },
+    "claude-opus-5-5": { "be_millio": 4, "ki_millio": 20, "cache_olv_millio": 0.2 },
+    "claude-opus-5": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-8": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-7": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-6": { "be_millio": 5, "ki_millio": 25 },
+    "claude-opus-4-5": { "be_millio": 5, "ki_millio": 25 },
+    "claude-sonnet-5-5": { "be_millio": 2, "ki_millio": 10 },
+    "claude-sonnet-5": { "be_millio": 2, "ki_millio": 10 },
+    "claude-sonnet-4-6": { "be_millio": 3, "ki_millio": 15 },
+    "claude-sonnet-4-5": { "be_millio": 3, "ki_millio": 15 },
+    "claude-haiku-5-5": { "be_millio": 0.5, "ki_millio": 2.5 },
+    "claude-haiku-4-5": { "be_millio": 1, "ki_millio": 5 }
+  }
+}

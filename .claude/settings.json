@@ -1,0 +1,69 @@
+{
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mvn test:*)",
+      "Bash(mvn -B test:*)",
+      "Bash(mvn clean test:*)",
+      "Bash(mvn -B clean test:*)",
+      "Bash(mvn verify:*)",
+      "Bash(mvn clean verify:*)",
+      "Bash(mvn -o jacoco:check@check-unit-tested-classes)",
+      "Bash(mvn -o jacoco:check@check-unit-tested-classes *)",
+      "Bash(mvn -v)",
+      "Bash(mvn -v *)",
+      "Bash(mvn -version)",
+      "Bash(java -version)",
+      "Bash(java -version *)",
+      "Bash(npm ci)",
+      "Bash(npm ci *)",
+      "Bash(npm test:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint *)",
+      "Bash(npm run e2e:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(node spec/backend/conformance/run.mjs:*)",
+      "Bash(node .claude/skills/dokumentacio-iro/scripts/dok-leltar.mjs:*)",
+      "Bash(node .claude/skills/skill-iro/scripts/ellenoriz.mjs:*)",
+      "Bash(node .claude/skills/skill-iro/scripts/leltar.mjs:*)",
+      "Bash(node .claude/skills/feature-spec-writer/scripts/spec-ellenoriz.mjs:*)",
+      "Bash(node .claude/skills/feature-full/scripts/unit-jeloltek.mjs:*)",
+      "Bash(node .claude/skills/cost-reducer/scripts/merleg.mjs:*)",
+      "Bash(node .claude/skills/futas-merleg/scripts/futas-merleg.mjs:*)",
+      "Bash(git status *)",
+      "Bash(curl -s http://localhost:3001/*)",
+      "Bash(curl -sS http://localhost:3001/*)",
+      "Bash(curl -s http://localhost:5173/*)",
+      "Bash(rm -f .scratch/futas-merleg/aktiv-futas.json)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/kontextus-mero.mjs",
+              "delegalas"
+            ]
+          },
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/futas-mero.mjs",
+              "kapu"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

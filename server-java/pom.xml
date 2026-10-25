@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Spring Boot 3.5.x: a JDK 25-tel is elboldoguló legfrissebb 3.x.
+         A Byte Buddy a 25-ös class-file verziót csak az experimental flaggel fogadja el
+         (lásd WebshopApplication.main és a surefire argLine). -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.5.6</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>hu.webshop</groupId>
+    <artifactId>webshop-server</artifactId>
+    <version>1.0.0</version>
+    <name>webshop-server</name>
+    <description>Webshop backend (Express + lowdb helyett Java + Spring Boot + PostgreSQL)</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- Flyway: verziózott séma-migrációk. A séma SOSEM az alkalmazásból jön létre. -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL JDBC. -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Jelszóhash: BCrypt. CSAK a crypto modul kell — a spring-security-web
+             szűrőláncára nincs szükség, a hitelesítés saját interceptorral megy. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
+        <!-- Gmail API a rendelés-értesítőhöz (kecses no-op, ha nincs konfigurálva). -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>2.7.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.apis</groupId>
+            <artifactId>google-api-services-gmail</artifactId>
+            <version>v1-rev20240520-2.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.auth</groupId>
+            <artifactId>google-auth-library-oauth2-http</artifactId>
+            <version>1.24.1</version>
+        </dependency>
+
+        <!-- Tesztek: valódi HTTP (RANDOM_PORT) + Testcontainers Postgres. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A TestRestTemplate a JDK beépített kliensével nem tud PATCH-et küldeni;
+             a moderációs és státuszváltó végpontok viszont PATCH-esek. -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <jvmArguments>-Dnet.bytebuddy.experimental=true</jvmArguments>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Byte Buddy tolerálja a JDK 25 (class-file 69) verziót a tesztekben.
+                         A @{argLine} a JaCoCo prepare-agent által beállított tulajdonságot
+                         fűzi be; nélküle ez a konfiguráció FELÜLÍRNÁ az ágenst, és a
+                         lefedettség némán 0 lenne. -->
+                    <argLine>@{argLine} -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+
+            <!-- Lefedettség-mérés. A verzió a FUTTATÓ JVM-hez igazodik (JDK 25 =
+                 class-file major 69), nem a fordítási célhoz: az ágens minden betöltött
+                 osztályt instrumentál, a Byte Buddy által behúzott JDK-osztályokat is. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.14</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+
+                    <!-- Lefedettségi KAPU — a TELJES suite-ra mért REGRESSZIÓS kapu. Eddig a
+                         90%-os áglefedettségi ígéret (lásd a test-writer-java-unit skillt) csak
+                         konvenció volt: a riport feltöltődött, de semmi nem bukott el tőle. Egy nem
+                         gépi küszöb nem kapu, hanem preferencia.
+
+                         Mit mér: a `test` fázis teljes jacoco.exec-jét ítéli meg, tehát az
+                         integrációs tesztek (IntegrationTest-leszármazottak) által bejárt ágakat is
+                         beszámítja. A zöldje azt mondja, hogy a SUITE fedi az osztályt — NEM azt,
+                         hogy a unit tesztjei. A csak-unit szám opcionális mérési receptje
+                         (surefire excludesFile, -Dtest nélkül) a skill references/coverage-jacoco.md
+                         fájljában van; 2026-11-06-án unit-only módban is mind a tíz osztály 100,0%
+                         ágon állt. A kapu ettől nem változik.
+
+                         SZÁNDÉKOSAN OSZTÁLYSZINTŰ, nem csomagszintű a hatókör. A teljes modul
+                         áglefedettsége MÉRVE 86,2% (563/653; mvn clean test, 2026-11-06), tehát egy repószintű 90%-os szabály
+                         azonnal pirosra váltana — nem valódi hibától, hanem a soha nem unit-tesztelt
+                         legacy kódtól. Az alábbi lista azok az osztályok, amelyek unit tesztjei a
+                         test-writer-java-unit skill-lel készültek; mindegyik MÉRVE 100,0%
+                         áglefedettségen áll, tehát a 90%-os küszöb valódi tartalékkal teljesül,
+                         és a REGRESSZIÓT fogja meg — azt, ha egy refaktor vagy egy kézzel írt
+                         teszt lerontja őket.
+
+                         A `test` fázishoz van kötve (a report UTÁN, azonos fázisban a deklarációs
+                         sorrend dönt), hogy a CI `mvn -B test` parancsa változatlan maradhasson.
+
+                         Új osztály ide akkor kerüljön, ha a unit tesztjei a skill-lel készültek (a
+                         terve a docs/test-plans/ alatt van) és tényleg 90% felett van — a listát
+                         bővíteni kell, nem a küszöböt csökkenteni. -->
+                    <execution>
+                        <id>check-unit-tested-classes</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>CLASS</element>
+                                    <includes>
+                                        <include>hu.webshop.auth.ClientIpResolver</include>
+                                        <include>hu.webshop.auth.UserValidator</include>
+                                        <include>hu.webshop.catalog.ProductFilter</include>
+                                        <include>hu.webshop.catalog.ProductValidator</include>
+                                        <include>hu.webshop.common.JsonInput</include>
+                                        <include>hu.webshop.order.OrderTransitions</include>
+                                        <include>hu.webshop.security.AdminInterceptor</include>
+                                        <include>hu.webshop.security.AuthInterceptor</include>
+                                        <include>hu.webshop.security.CurrentUserArgumentResolver</include>
+                                        <include>hu.webshop.security.SessionService</include>
+                                    </includes>
+                                    <limits>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.90</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,18 @@
+# Mit hagyjon ki a Semgrep. A CI (.github/workflows/ci.yml) és a helyi
+# `semgrep scan` egyaránt ezt olvassa.
+#
+# FIGYELEM: ha ez a fájl létezik, a Semgrep beépített alapértelmezett kizárásai
+# NEM lépnek életbe — ezért van itt felsorolva a node_modules és a build-kimenet is.
+
+# Függőségek és build-kimenet
+node_modules/
+client/dist/
+server-java/target/
+dist/
+
+# Ügynök-munkafájlok és futásidejű naplók (gitignore-olt, de helyi futtatásnál ott van)
+.scratch/
+.claude/worktrees/
+.run/
+.git/
+.idea/
