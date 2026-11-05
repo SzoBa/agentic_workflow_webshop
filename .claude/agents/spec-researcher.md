@@ -4,8 +4,10 @@ description: |
   MUST BE USED egy spec-mappa implementálása ELŐTT: feltárja a kódbázis releváns
   konvencióit (útvonalak, séma, típusok, tesztminta), és tömör, fájl:sor hivatkozásokkal
   ellátott eligazítást ad az implementálónak. Használd proaktívan, amikor a fejlesztő egy
-  spec/{feature} mappát akar megvalósítani, kérdezi hogy "hogyan van ez a projektben
-  megoldva", vagy egy meglévő spec és a kódbázis viszonyát akarja tisztázni.
+  spec/{feature} mappát akar megvalósítani, vagy egy meglévő spec és a kódbázis viszonyát
+  akarja tisztázni — kizárólag spec-kontextusban, egy `spec/{feature}` mappa megvalósítása
+  előtt. NE használd általános kódbázis-kérdésre („hogyan van ez a projektben megoldva",
+  „hol van X"), ha nincs mögötte spec-mappa — arra a beépített `Explore` agent való.
   Csak olvas: kódot NEM ír és fájlt NEM módosít.
 tools: Read, Grep, Glob
 model: sonnet
@@ -46,7 +48,7 @@ Ha **nincs** ilyen skill, ezt a néhány tényt magad deríted fel, mielőtt bá
    a domináns; van-e közös bázisosztály/helper.
 5. **Hibaüzenet-katalógus** — van-e egyetlen hely, ahol a felhasználónak szánt szövegek
    laknak, és hol van a spec-oldali katalógusuk.
-6. **Projekt-utasítások** — `CLAUDE.md`, `CONTRIBUTING.md`, `README.md`, `docs/adr/`.
+6. **Projekt-utasítások** — `CLAUDE.md`, `CONTRIBUTING.md` (ha van), `README.md`, `docs/adr/`.
 
 Az eredményt **≤15 sorban** rögzítsd magadnak, és ne vezesd le újra a futás során. Ha skill
 nélkül dolgoztál, a jelentésben **mondd ki**, hogy a konvenciókat terepszemléből vezetted le.

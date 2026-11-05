@@ -40,9 +40,10 @@ deleted after the switchover ([ADR-0006](docs/adr/0006-atvaltas-a-java-backendre
 reference to `server/`, lowdb, or "reference implementation", it is stale — fix it. **Three folders
 are exempt** (see below): their staleness is the point.
 
-Not every `spec/*/` folder is a live norm. `spec/backend/` and `spec/admin-orders/` are; the three
-that moved out of the course's `week3/` folder on 2026-08-02 are **historical** — `admin-role`, `review-and-rating` and
-`termek-felhasznaloi-ertekeles`, all written against the Node/lowdb backend. Each one's
+Not every `spec/*/` folder is a live norm. `spec/backend/`, `spec/admin-orders/`,
+`spec/edit-user-data/` (a deliberately degraded exercise spec — its validator errors are the point,
+see its `modifs.md`) are; the other three — `admin-role`, `review-and-rating` and
+`termek-felhasznaloi-ertekeles` — are **historical**, all written against the Node/lowdb backend. Each one's
 `requirements.md` opens with a blockquote status header saying so; read it before anything else in
 the folder. They are records of how a feature was reasoned about, not instructions: don't hand them
 to `feature-implement`, don't rewrite them (`spec-guard.mjs` blocks writes under `spec/` anyway),
@@ -72,15 +73,15 @@ the CI lint job fails if either drifts.
 
 Frontend, from the repo root:
 - `npm install` · `npm run dev` (client only, port 5173) · `npm run build` · `npm test` (Vitest, `npm run test:watch` for watch mode)
-- `npm run lint` (ESLint, flat config in `eslint.config.mjs`; `npm run lint:fix` to autofix). It covers `client/` and the Node scripts in `spec/backend/conformance/` — never `server-java/`. Type-aware rules are deliberately off: `npx tsc --noEmit -p client/tsconfig.json` is what catches type errors.
+- `npm run lint` (ESLint, flat config in `eslint.config.mjs`; `npm run lint:fix` to autofix). It covers `client/`, the Node scripts in `spec/backend/conformance/` and the e2e step files (`e2e/**/*.mjs`) — never `server-java/`, and never `.claude/worktrees/` (run it from a worktree's own root instead). Type-aware rules are deliberately off: `npx tsc --noEmit -p client/tsconfig.json` is what catches type errors.
 - There is no `npm start`.
 
 Backend, from `server-java/` (needs JDK 25, Maven, Docker):
 - `docker compose up -d` — dev Postgres · `docker compose down -v` — full reset
 - `mvn spring-boot:run -Dspring-boot.run.profiles=dev` · `mvn test` (Testcontainers starts a real Postgres — Docker must be running)
-- `mvn test -Dtest=ClientIpResolverTest -DfailIfNoSpecifiedTests=false` runs one class (comma-separate for several). Handy for the unit tests: no Docker, a few seconds instead of minutes. **But `-Dtest` never runs `@Nested` classes** — surefire 3.5.4 selects the outer class, reports `Tests run: 0` and still exits green, and no pattern form (wildcard, `%regex[…]`, negation) changes that. Nine of the unit test classes are structured that way (`JsonInputTest`, `ProductFilterTest`, `ProductValidatorTest`, `UserValidatorTest`, and all five in `security/`); they only run in an unfiltered `mvn test`. A filtered run that prints `Tests run: 0` is the failure mode to watch for — it looks like a pass.
+- `mvn test -Dtest=ClientIpResolverTest -DfailIfNoSpecifiedTests=false -Djacoco.skip=true` runs one class (comma-separate for several). Keep the `-Djacoco.skip=true`: without it the `jacoco:check` gate below judges a one-class run, and the verdict depends on whatever an earlier run left in `jacoco.exec` — measured 2026-11-06: red (`OrderTransitions` 0.00) or falsely green, never meaningful. With it, `prepare-agent` sets an empty `argLine` and the fork still starts. Handy for the unit tests: no Docker, a few seconds instead of minutes. **But `-Dtest` never runs `@Nested` classes** — surefire 3.5.4 selects the outer class, reports `Tests run: 0` and still exits green, and no pattern form (wildcard, `%regex[…]`, negation) changes that. Nine of the unit test classes are structured that way (`JsonInputTest`, `ProductFilterTest`, `ProductValidatorTest`, `UserValidatorTest`, and all five in `security/`); they only run in an unfiltered `mvn test`. A filtered run that prints `Tests run: 0` is the failure mode to watch for — it looks like a pass.
 - Every `mvn test` also writes a JaCoCo report to `target/site/jacoco/`; read per-class numbers from `jacoco.csv`, missed lines from `jacoco.xml`. The surefire `argLine` **must keep the leading `@{argLine}`** — it is what injects the JaCoCo agent, and dropping it makes coverage silently 0. `jacoco.exec` **appends** across runs, so a report taken after a filtered run still carries the previous run's data — use `mvn clean test` for any number you intend to quote.
-- `mvn test` also **fails** on a coverage regression: a `jacoco:check` execution (bound to the `test` phase, so the CI command stays `mvn -B test`) enforces 90% BRANCH on the ten classes the `test-writer-java-unit` skill has plans for — all of them measured at 100%. The scope is deliberately a **class list, not a package or the module**: the module as a whole sits at 86% branch, so a global 90% rule would go red on never-unit-tested legacy code instead of on a real regression. Raise coverage and add to the list; don't lower the threshold. Run it alone with `mvn -o jacoco:check@check-unit-tested-classes` (reuses the existing `jacoco.exec`, no re-run of the suite).
+- `mvn test` also **fails** on a coverage regression: a `jacoco:check` execution (bound to the `test` phase, so the CI command stays `mvn -B test`) enforces 90% BRANCH on the ten classes whose unit tests were generated with the `test-writer-java-unit` skill — all of them measured at 100%. It is a **full-suite regression gate**, not a unit-test quality score: it judges the whole run's `jacoco.exec`, so branches the integration tests take count too. (Measured unit-only on 2026-11-06 with the skill's optional `-Dsurefire.excludesFile` recipe — no `-Dtest`, so `@Nested` classes still run — all ten still sit at 100%; but the gate would not notice if a unit test lost a branch an integration test happens to take.) The scope is deliberately a **class list, not a package or the module**: the module as a whole sits at 86.2% branch (563/653, clean run 2026-11-06), so a global 90% rule would go red on never-unit-tested legacy code instead of on a real regression. Raise coverage and add to the list; don't lower the threshold. Run it alone with `mvn -o jacoco:check@check-unit-tested-classes` (reuses the existing `jacoco.exec`, no re-run of the suite).
 
 `DATABASE_PASSWORD` has **no default** — a missing value is a startup failure, so that a
 production deploy can't silently boot on a guessable credential. The `dev` profile supplies the
@@ -91,6 +92,10 @@ the credentials directly.
 Acceptance cases against a running backend:
 `node spec/backend/conformance/run.mjs --base-url http://localhost:3001 --clean-store`
 (54 of the 70 cases; the other 16 are `⚙` — covered by `mvn test`, see `konformancia.md`).
+`--clean-store` does **not** clean anything — it asserts a fresh store and switches on the cases
+that need one (K-05/48/49/77), so use it only right after `docker compose down -v`. On a used
+database (e.g. inside a feature chain) run it with `--skip-rate-limit` instead: K-51 otherwise
+locks this IP out of login for 15 minutes, persistently — the e2e suite included.
 
 E2E (browser → SPA → API → Postgres), from `e2e/` — a **third, standalone npm project**, not a
 workspace member, so the root `npm ci` never pulls Cucumber or Playwright in:
@@ -143,12 +148,14 @@ Four things about the security jobs that are easy to misread:
 - `trufflesecurity/trufflehog` is pinned to a **commit SHA** (third-party code running against our checkout), but its `version` input stays `latest` on purpose: the action's *code* is pinned, its *detectors* stay fresh — fresh detectors only pay off on a run the code did not trigger, and with the weekly `schedule` off, such a run now has to be started by hand (`workflow_dispatch`). The first-party `actions/*` tags are left floating, the usual accepted compromise.
 - Neither security job needs a token. Don't add `SEMGREP_APP_TOKEN` "to make it work" — the registry rulesets are public.
 
-Tests never sit next to the source: `client/test/`, `server-java/src/test/java/`, `e2e/` and
-`test/mocks/`. Two kinds of Java test live side by side in the Maven module, and picking the wrong
+Tests never sit next to the source: `client/test/`, `server-java/src/test/java/`, `e2e/`,
+`test/mocks/` and `test/hooks/` (node:test regression suites for the `.claude/hooks/`, run with
+`node --test "test/hooks/*.test.mjs"` — the bare folder form fails on Node 24; not in CI, not in
+the root `npm test`). Two kinds of Java test live side by side in the Maven module, and picking the wrong
 one is the usual mistake:
 
 - **Integration** (the bulk of the suite) — extend `hu.webshop.support.IntegrationTest`, which drives **real HTTP** against a real Postgres and builds every precondition through the public API. Prefer that seam over calling controllers directly. Anything crossing HTTP, JPA or a transaction boundary belongs here.
-- **Unit** — plain JUnit 5, Mockito only where there is a real collaborator, no Spring context and no Docker: `JsonInputTest`, `ProductValidatorTest`, `ProductFilterTest`, `UserValidatorTest`, `ClientIpResolverTest`, `OrderTransitionsTest`, `GmailOrderNotifierTest`, `LogLevelEnvironmentPostProcessorTest`, `SpaResourceConfigTest`. Use these for branchy pure logic (validation, parsing, state tables) — an integration test would measure the same branches ten times slower.
+- **Unit** — plain JUnit 5, Mockito only where there is a real collaborator, no Spring context and no Docker — 17 classes (measured 2026-11-06): `JsonInputTest`, `ProductValidatorTest`, `ProductFilterTest`, `UserValidatorTest`, `ClientIpResolverTest`, `OrderTransitionsTest`, `GmailOrderNotifierTest`, `LogLevelEnvironmentPostProcessorTest`, `SpaResourceConfigTest`, `CatalogWindowTest`, `DatabasePasswordCheckTest`, `AdminOrderSearchPatternTest`, and the five in `security/` (`AdminInterceptorTest`, `AuthInterceptorTest`, `CurrentUserArgumentResolverTest`, `InterceptorErrorWriterTest`, `SessionServiceTest`). Use these for branchy pure logic (validation, parsing, state tables) — an integration test would measure the same branches ten times slower.
 
 **Test-method names are English** in both kinds — `rejectsInvalidField`, not
 `elutasitjaAHibasMezot`. Same for `@Nested` class names (`class PriceAspects`). Everything else in a
@@ -162,7 +169,7 @@ callbacks are anonymous, so there is no name to anglicise.
 ## Coding conventions
 
 - `client/` is `"type": "module"`, TS with `moduleResolution: Bundler`. Its `tsconfig` targets **ES2020**, so `Array#at`, `Object.hasOwn` etc. fail the build — use index arithmetic instead.
-- `server-java/` packages are cut **by feature** (`auth/`, `catalog/`, `order/`, `review/`), not by layer — no `controller/`/`service/`/`dto/` split. `domain/` and `repo/` are the shared exceptions.
+- `server-java/` packages are cut **by feature** (`auth/`, `catalog/`, `order/`, `review/`, `stock/`), not by layer — no `controller/`/`service/`/`dto/` split. The shared or cross-cutting packages are `domain/`, `repo/`, `common/`, `config/`, `security/`, `ops/` and `bootstrap/`.
 - The Java response DTOs and `client/src/api.ts` define the same `Product`/`Order`/`Customer`/`OrderItem` shapes independently (no shared package). Change a shape → update both sides.
 - Prices are integer HUF (forints), no decimals.
 
@@ -172,7 +179,7 @@ callbacks are anonymous, so there is no name to anglicise.
 - Don't add or upgrade dependencies without asking — neither npm nor Maven. Already approved for tests: Vitest, `@testing-library/{react,jest-dom,user-event}`, `jsdom` — the client component tests need all four, so they are not a violation to "clean up". On the Maven side the `jacoco-maven-plugin` is likewise deliberate; its version tracks the **runtime** JDK (25 → 0.8.14+), not `java.version`, because the agent instruments JDK classes the Byte Buddy agent pulls in.
 - Credentials come **only** from the environment (spec 7.6). `server-java/.env` is gitignored; `.env.example` is the template.
 - The Postgres data lives in a Docker volume, not in the repo. `docker compose down -v` resets to seed data (8 demo products + seed admin `adminisztrator` / `admin123` — developer credentials).
-- `docs/` holds the design records next to the code: ADRs (`docs/adr/`), the orchestration run logs and the delegation-cost store (`docs/orchestration/`), the Gmail twin's behavioural spec (`docs/digital-twin/`), the scenario catalogues and the simulated-user report (`docs/scenario-catalog/`, `docs/user-simulation/`), the `edit-user-data` audit with the spec as it was before amendment (`docs/edit-user-data/`) and the CI gate log (`docs/AI-aware-ci/`). The weekly course folders (`week*/`) of the original course repo were deliberately **not** carried over; a mention of `week3/` in a historical spec header is provenance, not a path to follow.
+- `docs/` holds the design records next to the code: ADRs (`docs/adr/`), the orchestration run logs and the delegation-cost store (`docs/orchestration/`), the Gmail twin's behavioural spec (`docs/digital-twin/`), the scenario catalogues and the simulated-user report (`docs/scenario-catalog/`, `docs/user-simulation/`), the `edit-user-data` audit with the spec as it was before amendment (`docs/edit-user-data/`), the CI gate log (`docs/AI-aware-ci/`), the open-feature backlog (`docs/backlog/` — not a norm, never evidence) and the unit-test plans (`docs/test-plans/`). The demo tasks live in the root `presentation.md`; there is no separate demo script — a measured verification belongs in a run's `Running.md`, not in a hand-kept summary.
 
 ### Feature spec writer
 
@@ -188,24 +195,89 @@ from an existing spec folder and used to point at a skill that did not exist.
   section of `spec/admin-orders/requirements.md`. That is a human edit, not a generated one.
 - `scripts/spec-ellenoriz.mjs <feature>` gates the output: acceptance criteria without an id or a
   `*Bizonyíték:*` line, criteria no work item references (and vice versa), work items without a
-  `*Kész, ha:*` line, ticked checkboxes, permissive wording, dead links. Run against
+  `*Kész, ha:*` line, ticked checkboxes, permissive wording, dead links, and file names in the
+  plan that collide on a case-insensitive filesystem (`kupon.ts` + `Kupon.tsx` in one
+  folder: the extensionless import resolves to the wrong one on Windows/macOS). Run against
   `spec/admin-orders` it currently reports three real gaps — `AR-17`, `AR-20` and `AR-21` have no
   task pointing at them, the last two because they were added after the chain ran.
 - `references/kihivas-katalogus.md` is the interesting file: eight spec-writing failure classes that
   **actually happened here**, each with its evidence. The reviews of `admin-orders` found the
   defects were in the criteria's wording, not in the implementation.
 
+### Feature chain — worktrees, git, stack, permissions
+
+`feature-implement` / `feature-full` run background subagents, and a background subagent's
+permission prompt lands in the main session — or, unanswered, stalls it. Four rules keep a run
+from turning into a stream of prompts:
+
+- **Permissions.** The guards never return `allow`; a command they stay silent on falls through to
+  the normal flow. `.claude/settings.json` therefore carries a deliberately **narrow**
+  `permissions.allow` list: the canonical build/test commands (`mvn test` / `clean test` / `verify`
+  / `-o jacoco:check`, `npm ci` / `test` / `run build|lint|e2e`, `npx tsc --noEmit`,
+  `npx vitest run`), the repo's own `node` scripts by **relative** path, `curl -s
+  http://localhost:…`, and the exact `rm -f .scratch/futas-merleg/aktiv-futas.json` that clears the
+  run marker. No git mutation is on it — the main session has no guard. A guard's `deny`
+  or `ask` still wins over an allow rule. Write commands in the relative form the list matches; an
+  absolute `cd "D:/…/AI related/…"` prefix is the usual reason a prompt reappears. A background
+  agent in a worktree runs `cd .claude/worktrees/<name> && <allowed command>` from the repo root.
+  A subagent's Bash starts in — and resets to — the **main session's current directory**, not the
+  repo root (measured 2026-11-06), so the orchestrator checks `pwd` and returns to the root before
+  every delegation. Measured the same day, in default permission mode: the prescribed commands
+  ran without a prompt both in the main session and in a background subagent, and an off-list
+  external `curl` from a background subagent surfaced its prompt in the main session. Two other
+  off-list commands (`cd server-java && mvn -v` in a background subagent, a `curl` to example.com
+  in the main session) ran without a prompt. The cause is **unverified**: not the project or the
+  user allowlist (neither covers them), and not the Bash sandbox (`/sandbox`: unsupported on
+  Windows). Don't rely on the allowlist as a boundary for off-list commands — the guards are the
+  boundary. The validator measures the running API with the URL directly
+  after `curl -s` and the flags after it, because that is what `Bash(curl -s http://localhost:3001/*)`
+  matches.
+- **Worktrees live inside the repo**, under the gitignored `.claude/worktrees/`
+  (`{feature}-impl`, `{feature}-e2e`, `{feature}-unit-<Class>` for a parallel unit-test round).
+  Outside the working directory every Read and Edit asks. Branch names are unique per run
+  (`wt/{feature}-impl-<YYYYMMDD-HHMM>`), checked against `git worktree list` first. ESLint and
+  Semgrep skip the folder.
+- **Git hygiene.** On the default branch the chain starts with `git switch -c feature/{feature}`
+  (stops and asks if it exists). An uncommitted spec folder gets one spec-only commit, because the
+  worktrees branch from `HEAD` and would not see it. The starting `HEAD` and `git status
+  --porcelain` go into `Running.md`, and every "only allowed files changed" check diffs against
+  that, not against a clean tree; a dirty `README.md`/`openapi.yaml` stops `feature-full` before it
+  starts. The run ends in **one** closing commit (fix rounds, unit tests, `pom.xml` includes,
+  README/OpenAPI, run logs — never the two meter ledgers). Never a push.
+- **Decomposition is not in the spec.** `plan.md` section 5 ("Munkacsomagok és függőségeik")
+  records only work facts — the packages, which one builds on which, which are independent —
+  because every subagent reads the spec as a norm. The shape of the chain (how many delegations,
+  serial or parallel, who gets what context) goes to `docs/orchestration/{feature}/Orchestrator.md`,
+  which `feature-full` phase 1/b generates from `.claude/skills/feature-full/references/orchestrator-sablon.md`
+  and no subagent ever sees; independent packages get a parallel proposal, each in its own
+  `{feature}-impl-{X}` worktree. Without an `Orchestrator.md`, `feature-implement` runs its default
+  chain and records that in `Running.md`. The old-style section 5 of `spec/admin-orders/plan.md`
+  ("four delegations, all sequential") stays as written, but its organisational part is not a norm.
+- **The stack stays up until the end**, because the validator and the late e2e writer measure the
+  running API. `spec-validator` never starts a stack; with no `/api/health` its runtime verdicts are
+  `[kétséges]`. Every merge is followed by a mandatory build, test and lint on the merged tree
+  (`feature-implement` 4/6 — the only lint gate); red there is an integration error, as is a
+  backend that will not start on a free port. In parallel (D) decomposition a package that builds
+  on two parallel packages (fan-in) waits for both merges and gets a fresh worktree from the merged
+  HEAD; if several packages write migrations, `plan.md` assigns each its own Flyway version. The
+  run report is asked for **without** `--atirat` by default (the session transcript lives outside
+  the workspace), so the last delegation may be missing from it — the report says so. If the stack was already running before the merge, the backend is serving pre-merge
+  code — the chain stops and asks for a restart (likewise after any `server-java/` fix).
+
 ### Java unit test writer
 
 `.claude/skills/test-writer-java-unit/` — JUnit 5 + Mockito test generator with a **90% JaCoCo
-branch-coverage gate**. It works on this repo's `server-java/` module as well as on external Java
-projects; the unit tests listed above were generated with it. One production class per run, walked
+branch-coverage target** per class (the figure comes from an unfiltered run, i.e. the whole suite;
+the unit-only recipe is optional). It works on this repo's `server-java/` module as well as on external Java
+projects; ten of the unit-test classes listed above (the ones on the `jacoco:check` list) were generated with it. One production class per run, walked
 method by method.
 
 It **never edits production code**: if a class needs a seam to become testable, it reports that
 instead of refactoring. It also refuses to state a coverage percentage JaCoCo did not produce.
-Its test plans go to `.scratch/test-writer/<Class>.md` (gitignored) — read the plan before extending
-a generated test class, it carries the case derivation and the flagged oddities.
+Its test plans go to `docs/test-plans/<Class>.md` (**versioned**; the `unit-test-write` guard mode
+allows that folder) — read the plan before extending a generated test class, it carries the case
+derivation and the flagged oddities. The plans of the ten gated classes were written to the old,
+gitignored `.scratch/test-writer/` and are lost.
 
 ### Root README and OpenAPI descriptor — the documentation pair
 
@@ -221,7 +293,8 @@ Hungarian error strings, the `stock` vs `available` distinction and the total-ap
 in none of them. The price is that a hand-written descriptor rots on its own, so the only thing
 holding it true is the gate:
 
-`scripts/dok-leltar.mjs` reads the same endpoint set from three places — the controllers'
+`scripts/dok-leltar.mjs` (run inside a project worktree, it measures that worktree, not the main
+tree) reads the same endpoint set from three places — the controllers'
 mapping annotations, the root descriptor, and the README — and compares them. It is a **gate,
 not an advisor**: any divergence exits 1. It reports *surplus* as well as *missing*, and surplus
 is the worse of the two — a missing endpoint gets searched for, a non-existent one gets called.
@@ -255,16 +328,53 @@ Two facts about `.claude/` that the skill encodes, and that anyone editing an ag
   procedures the developer invokes. **Project facts belong in the convention skill, never inline in the agent** — a fact
   living in two places has already drifted twice here (a stale World method list that caused a
   duplicated fixture builder; a missing lint command that let "done" mean CI-red).
+- `spec-guard.mjs` has eight modes — `impl-write`, `impl-bash`, `e2e-write`, `e2e-bash`,
+  `unit-test-write`, `unit-test-bash`, `docs-write`, `readonly-bash` — and **every writing agent**
+  is guarded, the generic `debugger`/`refactorer`/`test-runner`/`docs-writer` included. It parses
+  the command line with a quote-aware tokenizer (sh, PowerShell and cmd dialects) and judges argv,
+  not raw text, so `2>&1`, `grep "a|b"` or a quoted path with a space are not false alarms. The
+  Bash modes also extract a command's **write targets** (redirection, `tee`, `sed -i`, `cp`/`mv`,
+  `rm`, the PowerShell file cmdlets) and apply the matching write-mode rules to them — `echo x >
+  spec/…` is a deny, not a hole. It is still not a sandbox: in-process writes (`node -e`, an npm
+  script) stay invisible. The writing modes have an extended git *deny*list, deliberately no
+  *allow*list.
+- Writes outside the workspace (`/tmp`, `%TEMP%`) are denied in the allow-listed Bash modes
+  (`e2e-bash`, `unit-test-bash`) — the developer's global rule keeps native tools inside the
+  working folders; the deny text points to `.scratch/`. `unit-test-write`/`-bash` also allow
+  `docs/test-plans/<Class>.md` (flat, `.md` only).
 - `spec-guard.mjs` answers `defer` on an **unknown mode** (its `switch (MODE)` default), so a
   typo'd mode string in an agent's `hooks:` block silently disables the guard. Nothing else
   catches this — run `node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind` after touching
   an agent's frontmatter. It also flags dead `references/` links, orphaned bundled files, and
-  `skills:` entries pointing at a skill that doesn't exist.
+  `skills:` entries pointing at a skill that doesn't exist. With `--mind` it also **runs** every
+  hook in every mode (in a temp `CLAUDE_PROJECT_DIR`, so the meters write nowhere real) and fails
+  if any of them emits `defer` — the 2026-10-25 stall, caught by measurement, not by reading source.
+  It reads the hook wiring in `.claude/settings.json` too, so a typo'd meter mode (`"kpau"`) is
+  an error there as well, not a silently disabled budget gate; a hook that crashes (exit ≠ 0/2) is
+  an error too. Check 8 matches the `permissions.allow` patterns against a fixed list of
+  prescribed command forms under the documented rule — a trailing ` *`/`:*` demands a word
+  boundary, so `Bash(curl -s http://localhost:*)` never matched `curl -s http://localhost:3001/…`
+  (that is how the background validator kept asking). `scripts/leltar.mjs --keres` searches with a
+  small HU↔EN synonym table and lifts an agent and the skill it loads together.
+- Every guard mode — the read-only one included — denies writes to `.claude/hooks/`,
+  `.claude/agents/`, `.claude/skills/`, `.claude/settings*.json` and the budget gate's
+  `docs/orchestration/_kontextus/{keretek,receptek,arak}.json`: the guard, the allowlist and the
+  thresholds are the developer's decisions, not an agent's. In a `.claude/worktrees/` worktree the
+  worktree's own `.claude/` counts. Only the main session (unguarded) edits them. A delete or an
+  unknown-content write aimed at a protected path's parent (`rm -rf docs`, `tar -x -C .`) is a deny
+  too. Every Bash mode also denies git configuration that runs a command (`-c core.pager=…`,
+  `core.fsmonitor`, `diff.external`, `*.textconv`, `filter.*`, `credential.helper`, …), `difftool -x`,
+  and setting `GIT_PAGER`/`GIT_EXTERNAL_DIFF`/`GIT_SSH_COMMAND`/`GIT_EDITOR` — use `git --no-pager`.
+  In read-only mode `node` passes only with a repo script or `--test` (`node -e` asks), `npx tsc`
+  only with `--noEmit`, `vitest` only with `run`. Writes into `.git/` (a worktree's `.git` file too) are
+  denied in every mode — `echo … >> .git/config` would otherwise run code on the next git call. A
+  target behind an existing symlink or Windows junction is judged by its real location as well
+  (`echo x > docs/link-to-spec/a.md` is a spec write); deleting the link itself is not.
 
 ### Delegation cost — measuring and trimming the context handed to subagents
 
 Two halves. `.claude/hooks/kontextus-mero.mjs` is a `PreToolUse` hook wired in
-`.claude/settings.json` (matcher `Agent|Task`): it measures **every** delegation and applies
+`.claude/settings.json` (matcher `Agent|Task|SendMessage`): it measures **every** delegation and applies
 **approved recipes only**. `.claude/skills/cost-reducer/` is the judging half — it reads the
 measurements, proposes, asks you, and stores what you approve. The hook never invents a
 shortening; without a recipe the prompt passes through untouched.
@@ -278,9 +388,20 @@ the official hook documentation is wrong on each, and each fails silently:
 - `updatedInput` only takes effect with `permissionDecision: "allow"`. With `defer` the hook runs,
   emits the rewrite, and the subagent still gets the original — no error, no warning.
 
-That last one has a price: rewriting **bypasses the permission prompt for that delegation**. So
-the hook returns `allow` *only* when it actually applied a recipe. `COST_REDUCER=0` disables it
-for a run. Like `spec-guard.mjs`, it answers `defer` on an unknown mode string — same silent trap.
+A fourth, measured on 2026-10-25 (Claude Code 2.1.310), changed under the hooks: an emitted
+`permissionDecision: "defer"` no longer means "fall through to the normal permission flow" — it
+*defers* the tool call, and a background subagent stops at its first Bash call with no error
+(`hook_deferred_tool` in its transcript). All three hooks (`spec-guard`, `kontextus-mero`,
+`futas-mero`) still use `defer` internally as "no verdict", but their `decide()` now exits 0 with
+**no output** for it. Never emit `defer` from a hook here.
+
+That third one has a price: rewriting **bypasses the permission prompt for that delegation**. So
+the hook returns `allow` *only* when a recipe actually changed the prompt — a recipe whose
+operations matched nothing is logged as `mert` and passes through. `COST_REDUCER=0` disables it
+for a run, measurement included. On an unknown mode string both meters emit only a `systemMessage`
+(no `permissionDecision`), so the typo is visible instead of silent. A recipe counts as approved
+only with a real, non-future `YYYY-MM-DD` in `jovahagyva`; a malformed recipe is logged as `hiba`
+and never applied.
 
 The store is `docs/orchestration/_kontextus/`: `receptek.json` and `meresek.jsonl` are
 **versioned** (recipes are decisions, like `Decision.md`, and the ledger holds no prompt text —
@@ -288,7 +409,9 @@ only hashes and sizes); raw prompts and block previews go to the gitignored
 `.scratch/cost-reducer/`. A recipe without a `jovahagyva` date is inert — that is also how you
 revoke one. Under the human approval sits a machine backstop: four protected strings
 (`A munkagyökered`, `mutató a bizonyítékhoz`, `kötelező érvényű`, `szó szerint`) that must
-survive a rewrite, plus a minimum-length ratio. If either trips, the whole rewrite is dropped and
+survive a rewrite — counted per occurrence, so dropping one of two copies trips it, and copies
+the recipe's own `helyette` text brings in don't count — plus a minimum-length ratio that a recipe
+can only tighten (`Math.max`), never loosen. If either trips, the whole rewrite is dropped and
 logged as `elutasitva` — fix or revoke the recipe, don't lower the threshold.
 
 What it can measure: characters, repetition, how often a recipe fired. What it cannot: token
@@ -305,13 +428,13 @@ they get cut.
 The second half of the same story, and a different question: `cost-reducer` asks *what could we
 cut from the prompt going in*, `futas-merleg` asks *what did the run actually consume, and is it
 getting anywhere*. Same two-part shape — `.claude/hooks/futas-mero.mjs` is the machine half (a
-`PreToolUse` hook on the same `Agent|Task` matcher), `.claude/skills/futas-merleg/` is the judging
+`PreToolUse` hook on the same `Agent|Task|SendMessage` matcher), `.claude/skills/futas-merleg/` is the judging
 half — but this one **can stop the chain**, and it measures real numbers rather than estimates.
 
 The measurement is possible because the hook payload carries `transcript_path`, and next to the
 session transcript sits `<session>/subagents/agent-*.jsonl` — one per delegation, every
-`assistant` line holding a true `usage` block. The `.meta.json` beside it carries `toolUseId`,
-which joins the transcript back to the delegation the hook saw. So the hook reconciles *previous*
+`assistant` line holding a true `usage` block. The join back to the delegation the hook saw is the
+main transcript's `tool_result.tool_use_id` (the `.meta.json` supplies `agentType` and `finished`). So the hook reconciles *previous*
 delegations before each new one; nothing depends on `PostToolUse` or `Stop`, neither of which was
 verified here.
 
@@ -321,13 +444,46 @@ rather than an error:
 - `toolUseResult.status` says `completed` even for an agent killed mid-run by a session limit. Truncation is detectable **only** from the report text, so a `status` check would silently accept a half-finished validator verdict.
 - A validator report with **no** `[teljesül]`/`[nem teljesül]` markers is a measurement gap, never "zero failures" — the same principle that keeps `[kétséges]` from starting a fix round. Such a round is excluded from the convergence curve rather than counted as progress.
 
+Two more, measured on 2026-10-25 (Claude Code 2.1.310), same failure shape:
+- **One API response is several transcript lines.** Every content block of an `assistant` message gets its own line, each carrying the *same* `usage`. Summed per line, cost multiplies by the block count (measured 13 messages in 56 lines; a whole run read 5.07 M units instead of 2.02 M). A round is a `message.id`, never a line. Whether the 2026-08-04 `admin-orders` calibration was inflated the same way is **unverified** — its subagent transcripts are gone.
+- **A background delegation is invisible in the main transcript.** Its `toolUseResult` is `{ isAsync: true, status: "async_launched", agentId }` — no `agentType`, no report, and no second result when it ends. The old reconciliation skipped it silently, so the budget, convergence and oscillation gates saw **nothing** of a background run. `agentType` and `finished` now come from `subagents/agent-<id>.meta.json`, the report from the subagent's `SubagentHandback` call, and a background delegation resumed with SendMessage is booked as a `folytatas` row (consumption, not a new delegation). **Known gap:** a *foreground* agent resumed with SendMessage is not booked at all, because the shape of that result line was never measured — the budget under-counts such a sequence. A still-running background agent (meta present, `finished: false`) is skipped, not booked as `hiba`.
+
+**The run boundary is the chain, not the session** (decision 2026-11-06). The run id resolves as
+`FUTAS_AZONOSITO` env (settable only at launch) > a fresh marker `.scratch/futas-merleg/aktiv-futas.json`
+(`{"futas": "{feature}-<YYYYMMDD-HHMM>", "kezdet": "<ISO-8601>"}` — the timestamp is the one in the
+worktree branch names, so a re-run is a *new* run; fresh = timezone-qualified, not in the future,
+≤ 6 h old) > the session id. The chain writes the marker at its start and deletes it at its end and
+on every early stop; the hook only reads it, and ignores a broken, expired or future one
+(fail-open). Because the hook reconciles *previous* delegations, it records a `tool_use_id` → run
+binding (for SendMessage: recipient → run) in the gitignored `.scratch/futas-merleg/delegalasok.jsonl`
+at delegation time, so the chain's last delegation still lands in the chain's run after the marker
+is gone. Ask for the report with `futas-merleg.mjs --futas <run name>`; `--atirat` reads the session
+transcript, which lives outside the workspace, so it needs the developer's explicit approval. A
+SendMessage binding is written *after* reconciliation and carries the session, the agent id and the
+recipient's round count, so an unbooked continuation is split at those round boundaries and a later
+SendMessage can no longer pull an earlier continuation into its own run. The marker may carry an
+optional `session`; a mismatch ignores it. Ledger rows are **deduplicated on read**
+(`tool_use_id` + section start) wherever they are summed, because two concurrent hooks can both
+append the same row. A transcript with zero parseable lines is a broken meter (no verdict);
+measurement gaps surface as a `systemMessage` with no `permissionDecision`, never on stderr; a
+missing `meta.json` becomes a `hiba` row only on a reconciliation ≥ 60 s after the first sighting.
+`kontextus-mero` rows carry `futas` and `tool_use_id` too (`merleg.mjs --futas`). Deleting or
+rewriting the marker to get past a `deny` restarts the budget from zero — that is routing around
+the gate, not a fix.
+
 Three rules are live by default, and a `deny` from any of them **ends the chain** — it is a
 decision point for the developer, not an obstacle to route around (don't re-run the delegation,
 split it smaller, or set `FUTAS_KERET=0` yourself). **Budget**: cumulative run cost crosses a
 threshold — this catches what a round counter cannot, many small delegations that never reach
 round 2. **Convergence stall**: two consecutive validator rounds fail to reduce the
-`[nem teljesül]` count. **Oscillation**: a criterion that previously passed fails again — the raw
-count hides this (`3 → 1` looks like progress while a working criterion regressed). The
+`[nem teljesül]` count. **Oscillation**: a criterion that passed in *any* earlier round fails again — the raw
+count hides this (`3 → 1` looks like progress while a working criterion regressed). Each verdict
+line yields exactly one criterion id (the first before the marker, else the first after it, with
+Unicode boundaries — `ÁR-01` stays whole), so an `UTF-8` or a cross-reference in the text is never
+mistaken for a criterion. A clean round followed by failures (0 → N) is caught by the
+**oscillation** rule, deliberately not by the convergence rule (decision 2026-11-06, proven in
+`test/hooks/merok.test.mjs`); known gap: an id no earlier round ever marked `[teljesül]` trips
+neither. The
 "max 2 fix rounds" limit is deliberately **not** enforced here; it stays prose in
 `feature-implement`, and its slot in `keretek.json` is `null`.
 
@@ -336,6 +492,8 @@ meter never blocks work. Validator delegations are never denied — a stalled ru
 the closing measurement matters most. The store is `docs/orchestration/_kontextus/`:
 `futasok.jsonl` (the ledger — numbers only, no prompt text), `keretek.json` (thresholds, calibrated
 from the measured `admin-orders` run: 5 delegations, ≈$34.67, 62 minutes) and `arak.json` (the
-price table, with a mandatory `ervenyes` date). Money is always a **derived** figure printed with
+price table, with a mandatory `ervenyes` date — a missing one is flagged in the report). A model
+with no price (after stripping a `-YYYYMMDD` suffix) marks the USD figure `koltseg_usd_reszleges`
+and lists it in `araznatlan_modellek`; a partial USD never blocks on its own, the unit budget does. Money is always a **derived** figure printed with
 its source; the cost-unit weights are a stated assumption, not a measurement. If the gate fires,
 the threshold does not come down — same rule as the JaCoCo coverage gate.

@@ -61,9 +61,16 @@ meg** — a szervezés metaszintje az implementálónak zaj.
 
 A hook akkor alkalmaz egy receptet, ha **mind** igaz:
 
-1. van `jovahagyva` dátum,
+1. a `jovahagyva` **valódi, nem jövőbeli** `ÉÉÉÉ-HH-NN` dátum (a `"igen"`, a `true`, a
+   `"2026-02-31"` vagy egy holnapi dátum nem jóváhagyás; ugyanez a `jovahagyott()` dönt
+   a `merleg.mjs`-ben is, ott „érvénytelen jóváhagyás" a neve),
 2. az `agent` egyezik (vagy `*`),
-3. az `amikor.blokkok` **minden** hashe megtalálható a promptban.
+3. az `amikor.blokkok` **minden** hashe megtalálható a promptban,
+4. a recept átmegy a séma-ellenőrzésen (`receptHiba()`): van nem üres `id` és **nem üres
+   `indok`**, a `muveletek` nem üres lista ismert típusokkal és 12 jegyű `blokk`-hashsel,
+   a `csere`-nek van `helyette` szövege. Az 1–3. alapján illeszkedő, de sémahibás recept
+   **nem** fut le: a mérés `allapot: "hiba"`-ként rögzíti az okát, és a prompt eredetiben
+   megy tovább.
 
 Az első illeszkedő recept fut le, több nem. Ha két receptet akarsz egyszerre, egyesítsd
 őket egy recept több műveletévé — így egyben látszik, mit tesz.
@@ -107,11 +114,13 @@ Delegálásonként egy sor. Prompt-szöveget **nem** tartalmaz, csak méretet é
 | Mező | Mi |
 |---|---|
 | `ts`, `session`, `agent`, `model` | mikor, melyik munkamenetben, kinek |
+| `futas` | melyik lánc — ugyanaz a feloldás, mint a futásmérlegé (env > friss jelző > session); a `merleg.mjs --futas <név>` erre szűr. A mező bevezetése előtti soroknak nincs |
+| `tool_use_id` | a delegálás azonosítója — ezzel köthető a `futasok.jsonl` sorához |
 | `karakter`, `token_becsles` | a prompt mérete. A token **becslés** (≈4 karakter) — a harness nem ad tokenszámot a hooknak |
 | `blokkok` | `{h, n}` párok: blokk-hash és karakterszám |
-| `allapot` | `mert` \| `atirva` \| `elutasitva` |
+| `allapot` | `mert` \| `atirva` \| `elutasitva` \| `hiba` (érvénytelen recept vagy a recept-ág hibája) |
 | `recept`, `megtakaritas`, `muveletek`, `visszajatszas` | csak `atirva` esetén |
-| `ok` | csak `elutasitva` esetén: mi bukott meg |
+| `ok` | `elutasitva` és `hiba` esetén: mi bukott meg |
 
 A blokk-hash a mérés egysége. Ebből derül ki, hogy ugyanaz a spec-részlet vagy kutatói
 jelentés hány delegáláson ment át egy láncban — és ebből lesz a recept `amikor.blokkok`

@@ -9,7 +9,9 @@
 //   node .claude/skills/skill-iro/scripts/leltar.mjs
 //   node .claude/skills/skill-iro/scripts/leltar.mjs --keres "java unit teszt jacoco"
 //
-// A `--keres` szóátfedést számol a leírásokkal, és a három legerősebb találatot emeli ki.
+// A `--keres` szóátfedést számol a leírásokkal (egy kis HU ↔ EN szinonimatáblával), és a három
+// legerősebb találatot emeli ki (a 3. hellyel holtversenyben állókat mind). Egy agent és az
+// egyetlen skill, amit betölt, egy párként a jobbik pontszámot kapja.
 // Ez a fedésvizsgálat BELÉPŐJE, nem az ítélete: a pontszám csak azt mondja meg, melyik
 // két-három fájlt kell elolvasni, mielőtt új mappa nyílik.
 
@@ -36,22 +38,74 @@ function tokens(s) {
 }
 
 // A magyar toldalékolás miatt a pontos egyezés túl szigorú ("teszt" vs "tesztek"),
-// a részsztring-keresés viszont túl bőkezű. Előtag-egyezés, 4 karakteres alsó korláttal.
-function matches(a, b) {
-  if (a === b) return true;
-  return Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a));
+// a részsztring-keresés viszont túl bőkezű. EGYIRÁNYÚ előtag-egyezés: a leírás szava
+// kezdődjön a keresőszóval ("teszt" → "tesztek", "tesztelt"). A fordított irány a hiba volt:
+// "teszt" ↔ "tesz" (a „javaslatot tesz") egyezett, mert a rövidebb szó előtagja a hosszabbnak,
+// és a cost-reducer került az élre egy unit-teszt keresésnél.
+// Második út: legalább 5 karakteres közös előtag, ha a keresőszó maga is toldalékos
+// ("tesztek" ↔ "tesztet", "leírót" ↔ "leírás" nem — 4 közös karakter, az már nem bizonyíték).
+const KOZOS_ELOTAG = 5;
+function commonPrefix(a, b) {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i += 1;
+  return i;
+}
+function matches(q, d) {
+  if (q === d) return true;
+  if (q.length >= 4 && d.startsWith(q)) return true;
+  return commonPrefix(q, d) >= KOZOS_ELOTAG;
 }
 
+// HU ↔ EN szinonimák. A leírások vegyes nyelvűek: a generikus agentek és a hordozható
+// `test-writer-java-unit` angolul, a projektspecifikusak magyarul írnak. Szinonima nélkül egy
+// „teszt" keresés a `test-runner`-t és a `test-writer-java-unit`-ot nem látta — épp azt a két
+// jelöltet, amelyek a duplikátumot csinálnák. Egy csoport minden szava egyenrangú: a keresőszó
+// bármelyikre illeszkedik (ugyanazzal az előtag-szabállyal, mint a leírásnál), és akkor a
+// csoport összes szavát is keressük. Egy keresőszó a pontszámban egyszer számít, akárhány
+// szinonimája talált — a tábla bővít, nem súlyoz. Kicsi szándékosan: minden új sor zajt is hoz.
+const SZINONIMAK = [
+  ["teszt", "test"],
+  ["tesztelés", "testing"],
+  ["leíró", "descriptor"],
+  ["dokumentáció", "documentation", "docs"],
+  ["ellenőrzés", "ellenőriz", "check", "verify", "validate"],
+  ["hiba", "bug", "error"],
+  ["javítás", "javít", "fix"],
+  ["átnézés", "review"],
+  ["költség", "cost"],
+  ["specifikáció", "spec"],
+];
+
+// A keresőszó illeszkedik-e egy táblabeli szóra. Ugyanaz az egyirányú előtag-szabály, mint a
+// `matches`-ben, csak a tábla szava áll az előtag helyén ("tesztek" → "teszt" csoportja).
+function synonymsOf(q) {
+  const out = new Set([q]);
+  for (const csoport of SZINONIMAK) {
+    if (csoport.some((t) => matches(t, q))) for (const t of csoport) out.add(t);
+  }
+  return [...out];
+}
+
+// A gyakoriság is számít: egy leírás, ami ötször beszél tesztről, erősebb jelölt, mint ami
+// egyszer említi. De csökkenő hozadékkal (1 + 0,25 / további előfordulás, legfeljebb 2), hogy
+// egy szó ismételgetése ne verje a több különböző keresőszó egyezését.
 function score(queryTokens, entry) {
   const desc = tokens(entry.fm?.scalars?.description);
   const name = tokens(entry.name);
   let s = 0;
   for (const q of queryTokens) {
-    if (desc.some((d) => matches(q, d))) s += 1;
-    if (name.some((n) => matches(q, n))) s += 0.5; // a névtalálat megerősítés, nem önálló bizonyíték
+    const alts = synonymsOf(q);
+    const hit = (d) => alts.some((a) => matches(a, d));
+    const hits = desc.filter(hit).length;
+    if (hits > 0) s += Math.min(2, 1 + 0.25 * (hits - 1));
+    if (name.some(hit)) s += 0.5; // a névtalálat megerősítés, nem önálló bizonyíték
   }
   return s;
 }
+
+// A kiemelt találatok száma. A vágási pontnál álló holtversenyt NEM a readdir-sorrend dönti
+// el: aki a 3. helyezettel azonos pontú, mind bekerül.
+const TOP = 3;
 
 const entries = readAll();
 if (entries.length === 0) {
@@ -91,20 +145,47 @@ if (query !== null) {
     console.log("  A keresőkifejezésből nem maradt értékelhető szó (túl rövid vagy csak kötőszó).");
     process.exit(0);
   }
-  console.log(`  értékelt szavak: ${qt.join(", ")}\n`);
+  console.log(`  értékelt szavak: ${qt.join(", ")}`);
+  const bovites = qt.map((q) => [q, synonymsOf(q).filter((t) => t !== q)]).filter(([, s]) => s.length > 0);
+  console.log(
+    bovites.length > 0
+      ? `  szinonimákkal: ${bovites.map(([q, s]) => `${q} (+ ${s.join(", ")})`).join("; ")}\n`
+      : "",
+  );
 
-  const ranked = entries
-    .map((e) => ({ e, s: score(qt, e) }))
+  // Agent–skill PÁR: egy skill, amit pontosan egy agent tölt be (a `java-unit-test-writer` a
+  // `test-writer-java-unit`-ot, a `docs-api-writer` a `dokumentacio-iro`-t). A pár egy képesség
+  // két fájlban, és a bővítéshez mindkettőt látni kell — ezért a pár mindkét tagja a jobbik
+  // pontszámot kapja. A több agent által betöltött konvenció-skill (`spec-konvenciok`) nem pár:
+  // ott a felemelés minden keresést elárasztana vele.
+  const own = new Map(entries.map((e) => [e, score(qt, e)]));
+  const parja = new Map();
+  for (const e of entries) {
+    if (e.kind !== "skill" || betolti.get(e.name)?.length !== 1) continue;
+    const agent = entries.find((a) => a.kind === "agent" && a.name === betolti.get(e.name)[0]);
+    if (agent) { parja.set(e, agent); parja.set(agent, e); }
+  }
+  const all = entries
+    .map((e) => {
+      const p = parja.get(e);
+      const s = Math.max(own.get(e), p ? own.get(p) : 0);
+      return { e, s, emelt: p && own.get(p) > own.get(e) ? p : null };
+    })
     .filter((r) => r.s > 0)
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 3);
+    .sort((a, b) => b.s - a.s || a.e.kind.localeCompare(b.e.kind) || a.e.name.localeCompare(b.e.name));
+  const cut = all.length > TOP ? all[TOP - 1].s : 0;
+  const ranked = all.filter((r, i) => i < TOP || r.s === cut);
+  if (ranked.length > TOP) {
+    console.log(`  (holtverseny a ${TOP}. helyen: ${ranked.length} találat kerül ki ${TOP} helyett)\n`);
+  }
 
   if (ranked.length === 0) {
     console.log("  Nincs átfedő leírás. Ez a fedés HIÁNYÁRA utal, de nem bizonyítja:");
     console.log("  ha a szándék más szavakkal is leírható, keress újra azokkal.");
   } else {
-    for (const { e, s } of ranked) {
-      console.log(`  ${String(s).padStart(4)} pont  ${e.kind}/${e.name}  →  ${e.file}`);
+    for (const { e, s, emelt } of ranked) {
+      const jel = emelt ? `  (pár: ${emelt.kind}/${emelt.name}; saját: ${own.get(e)})` : "";
+      console.log(`  ${String(s).padStart(4)} pont  ${e.kind}/${e.name}${jel}  →  ${e.file}`);
     }
     console.log("\n  Olvasd el a listázott fájlokat, mielőtt új mappát nyitsz. Ha a képességet");
     console.log("  valamelyik már fedi, azt BŐVÍTSD — a duplikátum két, széttartó igazságot csinál.");

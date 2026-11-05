@@ -12,8 +12,10 @@ description: |
 
 # skill-iro — skill és agent felvétele ebbe a repóba
 
-A `.claude/` mappa itt önálló rendszer: skillek, agentek és egy őrhook, amik `skills:`
-mezőkkel és hook-mód-stringekkel kapcsolódnak egymáshoz. Az új darabot ebbe a szövetbe kell
+A `.claude/` mappa itt önálló rendszer: skillek, agentek és három hook — az őr
+(`spec-guard.mjs`) és a két mérő (`kontextus-mero.mjs`, `futas-mero.mjs`), plusz egy közös
+modul (`futas-kozos.mjs`, a `futas-mero` és a `futas-merleg` skill riportja osztozik rajta) —,
+amik `skills:` mezőkkel és hook-mód-stringekkel kapcsolódnak egymáshoz. Az új darabot ebbe a szövetbe kell
 beleilleszteni, nem mellé tenni.
 
 **A kimenet mindig egy jelentés** — mi jött létre, mi került `references/`-be és miért, és mit
@@ -22,7 +24,10 @@ talált a validátor. Kód nélkül nincs jelentés: az 5. fázis zöldje a felt
 ## Nem alku tárgya
 
 - **Csak a `.claude/skills/` és a `.claude/agents/` alá írsz.** Terméki kódhoz, `spec/`-hez,
-  `docs/`-hoz nem nyúlsz. A `CLAUDE.md` bejegyzése az egyetlen kivétel, és azt is a 6. fázisban,
+  `docs/`-hoz, a `.claude/hooks/`-hoz és a `.claude/settings.json`-hoz nem nyúlsz. Ha a
+  döntés hook-alakot hoz ki (vagy egy agentnek új guard-mód kell), a kimenet **javaslat** a
+  jelentésben — a hook kódja és bekötése a fejlesztő döntése, mert egy hibás hook csendben
+  kapcsolhat ki egy őrt. A `CLAUDE.md` bejegyzése az egyetlen kivétel, és azt is a 6. fázisban,
   külön kimondva.
 - **Repótényt nem találsz ki.** Ami a fájlba kerül — útvonal, parancs, metódusnév, portszám,
   mezőnév —, azt előbb `Read` vagy `Grep` igazolja. Ha nem tudod igazolni, nem írod le.
@@ -97,8 +102,11 @@ node .claude/skills/skill-iro/scripts/ellenoriz.mjs <nev>     # egy bejegyzés
 node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind    # a teljes készlet
 ```
 
-Hat ellenőrzés: frontmatter · holt hivatkozás és árva fájl · `skills:`-bekötés · hook-bekötés
-és mód-string · ténykiszivárgás · méret. `HIBA` esetén nem nulla a kilépési kód — **addig nem
+Hét ellenőrzés: frontmatter · holt hivatkozás és árva fájl · `skills:`-bekötés · hook-bekötés
+és mód-string (az agent-frontmatterben, `--mind` mellett a `.claude/settings.json` és a
+`settings.local.json` `hooks` blokkjában is — a két mérőhook ott van bekötve, és egy elgépelt
+mód ott ugyanúgy némán kapcsolja ki a kaput) · ténykiszivárgás · méret · és `--mind` mellett a hook-válasz: minden hookot
+lefuttat minden módjában, és HIBA, ha bármelyik `defer`-t ír a stdout-ra. `HIBA` esetén nem nulla a kilépési kód — **addig nem
 mész tovább**. A `FIGYELEM` mérlegelést kér: vagy javítod, vagy leírod a fájlban, miért nem.
 
 A `--mind` a **meglévő** készletet is végigméri. Az ott talált, nem a te munkádból származó

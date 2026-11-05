@@ -93,9 +93,25 @@ Ami ki van hagyva a fából, az nem hiányzik, hanem **nem kérdés**: az implem
     érdemes rétegenként csomagra bontani. Ekkor a `plan.md`-be **fájltulajdon-táblázat**
     kell: melyik csomag mihez nyúlhat kizárólagosan. Ez teszi ütközésmentessé a párhuzamos
     vagy egymást követő implementálói futásokat.
-21. **Mi a függőségi sorrend?** Melyik csomag melyikre épül, és min keresztül (jellemzően a
-    típustükrön). A tükör **annak a csomagnak a tulajdona, ahol a válasz alakja születik** —
-    a másik olvassa, de nem írja.
+    Ha a 9. kérdés szerint **több csomag** ír migrációt, a csomagonkénti Flyway-verziószám
+    **tény, nem kérdés**: a következő szabad számot a
+    `server-java/src/main/resources/db/migration` listája adja, és a táblában csomagonként
+    egymás után kiosztod (B: `V4__`, C: `V5__`) — egy mondatban kimondod, és igent kérsz rá.
+21. **Mire épül melyik csomag?** Ez **nem kérdés, hanem megerősítendő állítás**: a függőség
+    a 20. válaszából és a fájltulajdon-táblázatból **következik** — melyik csomag melyiknek a
+    fájlját olvassa, és min keresztül (jellemzően a típustükrön). A tükör **annak a csomagnak
+    a tulajdona, ahol a válasz alakja születik** — a másik olvassa, de nem írja. Mondd ki
+    egy mondatban („F a B által írt `api.ts`-re épül"), és kérj rá igent.
+22. **Mely csomagok függetlenek egymástól?** Szintén levezetett tény, nem döntés: két csomag
+    független, ha egyik sem olvassa a másik fájljait. Egy sorban kerül a `plan.md`
+    5. szakaszába — az is állítás, ha egyik sem független.
+
+A 20–22. válasza a `plan.md` 5. szakasza („Munkacsomagok és függőségeik"), és **ennyi**. Hogy
+melyik subagent kapja melyik csomagot, milyen sorrendben, párhuzamosan-e, és mit kap
+kontextusként, azt **ne kérdezd meg, és ne is írd bele**: az nem a spec-írás döntése, hanem
+a `feature-full` 1. fázisáé, ami ebből a szakaszból generálja a
+`docs/orchestration/{feature}/Orchestrator.md`-t. A `plan.md`-t minden subagent normaként
+olvassa — egy ott álló delegálási leírás mindegyiknek utasítás volna.
 
 ---
 

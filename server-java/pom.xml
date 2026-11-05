@@ -149,15 +149,24 @@
                         </goals>
                     </execution>
 
-                    <!-- Lefedettségi KAPU. Eddig a 90%-os áglefedettségi ígéret (lásd a
-                         test-writer-java-unit skillt) csak konvenció volt: a riport feltöltődött,
-                         de semmi nem bukott el tőle. Egy nem gépi küszöb nem kapu, hanem preferencia.
+                    <!-- Lefedettségi KAPU — a TELJES suite-ra mért REGRESSZIÓS kapu. Eddig a
+                         90%-os áglefedettségi ígéret (lásd a test-writer-java-unit skillt) csak
+                         konvenció volt: a riport feltöltődött, de semmi nem bukott el tőle. Egy nem
+                         gépi küszöb nem kapu, hanem preferencia.
+
+                         Mit mér: a `test` fázis teljes jacoco.exec-jét ítéli meg, tehát az
+                         integrációs tesztek (IntegrationTest-leszármazottak) által bejárt ágakat is
+                         beszámítja. A zöldje azt mondja, hogy a SUITE fedi az osztályt — NEM azt,
+                         hogy a unit tesztjei. A csak-unit szám opcionális mérési receptje
+                         (surefire excludesFile, -Dtest nélkül) a skill references/coverage-jacoco.md
+                         fájljában van; 2026-11-06-án unit-only módban is mind a tíz osztály 100,0%
+                         ágon állt. A kapu ettől nem változik.
 
                          SZÁNDÉKOSAN OSZTÁLYSZINTŰ, nem csomagszintű a hatókör. A teljes modul
-                         áglefedettsége MÉRVE 86,0% (553/643), tehát egy repószintű 90%-os szabály
+                         áglefedettsége MÉRVE 86,2% (563/653; mvn clean test, 2026-11-06), tehát egy repószintű 90%-os szabály
                          azonnal pirosra váltana — nem valódi hibától, hanem a soha nem unit-tesztelt
-                         legacy kódtól. Az alábbi lista pontosan azok az osztályok, amikhez a skill
-                         teszttervet is írt (.scratch/test-writer/*.md); mindegyik MÉRVE 100,0%
+                         legacy kódtól. Az alábbi lista azok az osztályok, amelyek unit tesztjei a
+                         test-writer-java-unit skill-lel készültek; mindegyik MÉRVE 100,0%
                          áglefedettségen áll, tehát a 90%-os küszöb valódi tartalékkal teljesül,
                          és a REGRESSZIÓT fogja meg — azt, ha egy refaktor vagy egy kézzel írt
                          teszt lerontja őket.
@@ -165,8 +174,9 @@
                          A `test` fázishoz van kötve (a report UTÁN, azonos fázisban a deklarációs
                          sorrend dönt), hogy a CI `mvn -B test` parancsa változatlan maradhasson.
 
-                         Új osztály ide akkor kerüljön, ha van hozzá tesztterv és tényleg 90% felett
-                         van — a listát bővíteni kell, nem a küszöböt csökkenteni. -->
+                         Új osztály ide akkor kerüljön, ha a unit tesztjei a skill-lel készültek (a
+                         terve a docs/test-plans/ alatt van) és tényleg 90% felett van — a listát
+                         bővíteni kell, nem a küszöböt csökkenteni. -->
                     <execution>
                         <id>check-unit-tested-classes</id>
                         <phase>test</phase>

@@ -259,7 +259,7 @@ function Shell() {
         </main>
 
         <footer className="footer">
-          AI-native developer kurzus · webshop base projekt
+          Mini Webshop · spec-vezérelt ügynöki fejlesztés
         </footer>
       </div>
 

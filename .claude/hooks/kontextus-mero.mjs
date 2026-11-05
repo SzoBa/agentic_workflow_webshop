@@ -5,7 +5,10 @@
 //
 //   1. MÉR — minden delegálásnál rögzíti, mekkora promptot adunk át, milyen
 //      blokkokból áll, és melyik blokk hányadszor megy át ugyanabban a láncban.
-//      Ez mindig lefut, semmit nem befolyásol.
+//      A „lánc" a sor `futas` mezője: ugyanaz a feloldás, mint a futásmérlegé
+//      (`futasFeloldas`, `futas-kozos.mjs`: env > friss jelző > session), és a
+//      `merleg.mjs --futas <név>` erre szűr. A `tool_use_id` a futásmérleg naplójának
+//      soraival köti össze. Ez mindig lefut, semmit nem befolyásol.
 //   2. ÁTÍR — de KIZÁRÓLAG a fejlesztő által jóváhagyott recept alapján. Recept
 //      nélkül soha nem nyúl a prompthoz. Ez a szabály nem óvatosság, hanem a
 //      feladat lényege: egy modell által kitalált rövidítés pont azt az érdemi
@@ -25,14 +28,28 @@
 //
 // Ennek az utolsó pontnak ára van: átíráshoz `allow` kell, ami megkerüli a
 // delegálás engedélykérését. Ezért ez a hook `allow`-t KIZÁRÓLAG akkor ad, ha
-// ténylegesen alkalmazott egy receptet. Minden más úton `defer`, hogy a
-// felhasználó beállításait ne írja felül.
+// ténylegesen alkalmazott egy receptet — és az változtatott is a prompton. Minden
+// más úton belső `defer` (kimenet nélküli exit 0), hogy a felhasználó beállításait
+// ne írja felül.
 //
 // Használat (`.claude/settings.json`):
-//   "PreToolUse": [{ "matcher": "Agent|Task", "hooks": [{ "type": "command",
+//   "PreToolUse": [{ "matcher": "Agent|Task|SendMessage", "hooks": [{ "type": "command",
 //     "command": "node", "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/kontextus-mero.mjs", "delegalas"] }]}]
 //
-// Kikapcsolás egy futásra: `COST_REDUCER=0`.
+// Kikapcsolás egy futásra: `COST_REDUCER=0`. Ez NEMCSAK az átírást kapcsolja ki,
+// hanem a MÉRÉST is: a hook ilyenkor semmit nem mér, a `meresek.jsonl`-
+// be nem kerül sor, és a `.scratch/cost-reducer/` előnézete sem frissül. Az így
+// futtatott delegálások a cost-reducer mérlegéből utólag sem pótolhatók.
+//
+// Ismeretlen mód (elgépelt `args`): a hook semmit nem mér, és egy `systemMessage`-et
+// ad ki (permissionDecision NÉLKÜL), hogy a kikapcsolt mérés ne maradjon néma.
+//
+// MODULKÉNT IS BETÖLTHETŐ: a `cost-reducer/scripts/merleg.mjs` innen importálja a
+// `jovahagyott()`-at és a `receptHiba()`-t, hogy a recept aktív-voltáról UGYANAZ a
+// szabály döntsön, mint a hookban (nem másolat). Az importáló az import ELŐTT
+// `globalThis.KONTEXTUS_MERO_MODULKENT = true`-t állít, és akkor a hook-ág nem fut
+// (nem olvas stdin-t, nem lép ki). Szándékosan nem a futtatott fájl nevéből döntünk:
+// egy másképp (symlinken, más útvonal-alakkal) indított hook így sem némulhat el.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
@@ -40,6 +57,27 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MODE = process.argv[2] ?? "";
+
+// Hookként fut-e (lásd a fejlécet: modulként importálva a hook-ág nem fut).
+const FOPROGRAM = globalThis.KONTEXTUS_MERO_MODULKENT !== true;
+
+// A futás-azonosító feloldása a futásmérleg közös moduljából — dinamikusan, hogy egy
+// betöltési hiba se vigye el a mérést (fail-open: `futas: null`).
+let futasFeloldas = null;
+try {
+  ({ futasFeloldas } = await import("./futas-kozos.mjs"));
+} catch {
+  futasFeloldas = null;
+}
+
+/** A mérési sor `futas` mezője: env > friss jelző > session; hiba esetén `null`. */
+function futasAzonosito(input) {
+  try {
+    return futasFeloldas ? futasFeloldas({ session: input?.session_id ?? null }) ?? null : null;
+  } catch {
+    return null;
+  }
+}
 
 const REPO = process.env.CLAUDE_PROJECT_DIR
   ? resolve(process.env.CLAUDE_PROJECT_DIR)
@@ -52,6 +90,13 @@ const VISSZAJATSZAS = join(REPO, ".scratch", "cost-reducer", "visszajatszas");
 
 /** Egységes hook-válasz. Hiba esetén is `defer`: egy hibás mérő ne bénítsa le a láncot. */
 function decide(permissionDecision, reason, updatedInput) {
+  if (permissionDecision === "defer") {
+    // A belső `defer` („nem ítélek") kimenet nélkül zár, mert a 2.1.310 óta a
+    // kiadott `defer` a hívást elhalasztja, nem átengedi (lásd spec-guard.mjs fejléc).
+    // Az `updatedInput` itt amúgy sem érvényesülne — csak `allow` mellett hat.
+    if (reason) process.stderr.write(`${reason}\n`);
+    process.exit(0);
+  }
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: {
@@ -108,18 +153,71 @@ function hash(s) {
 // Egy recept akkor illeszkedik, ha az agent egyezik (vagy a recept `*`-os), ÉS
 // a `amikor.blokkok` MINDEGYIKE megtalálható a promptban. A jóváhagyás dátuma
 // kötelező: dátum nélküli recept nem alkalmazható, akkor sem, ha a fájlban van.
+//
+// „Dátum" = valódi, NEM jövőbeli `YYYY-MM-DD`. Egy `"igen"`, egy `true` vagy egy
+// `"nem"` nem jóváhagyás — korábban minden truthy érték annak számított, így a
+// `"jovahagyva": "nem"` épp az ellenkezőjét érte el, mint amit mondott. A jövőbeli
+// dátum sem az: jóváhagyni csak már meghozott döntést lehet.
+
+const ISO_DATUM = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** A helyi naptári nap `YYYY-MM-DD` alakban (a jóváhagyó is helyi dátumot ír). */
+function maiDatum() {
+  const d = new Date();
+  const ket = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${ket(d.getMonth() + 1)}-${ket(d.getDate())}`;
+}
+
+export function jovahagyott(ertek, ma = maiDatum()) {
+  if (typeof ertek !== "string") return false;
+  const m = ISO_DATUM.exec(ertek);
+  if (!m) return false;
+  // Naptári érvényesség: a `2026-02-31` alakra helyes, de nem létező nap.
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3]) return false;
+  return ertek <= ma;
+}
 
 function illeszkedik(recept, agent, hashek) {
-  if (!recept?.jovahagyva) return false;
+  if (!recept || typeof recept !== "object") return false;
+  if (!jovahagyott(recept.jovahagyva)) return false;
   if (recept.agent && recept.agent !== "*" && recept.agent !== agent) return false;
-  const kell = recept.amikor?.blokkok ?? [];
+  const kell = Array.isArray(recept.amikor?.blokkok) ? recept.amikor.blokkok : [];
   if (kell.length === 0) return false;
   return kell.every((h) => hashek.has(h));
 }
 
-/** A recept műveleteinek alkalmazása. Visszaadja az új blokklistát és a naplósorokat. */
+// Minimális recept-séma. A receptet ember írja kézzel (a `cost-reducer` skill
+// javasolja, de a fájl szerkeszthető), és egy elgépelt mező korábban kezeletlen
+// TypeError-ral vitte el a hookot — a mérési sor sem íródott meg. Az ellenőrzés
+// nem teljes séma, csak annyi, hogy az `alkalmaz` ne dőljön el.
+const MUVELET_TIPUSOK = new Set(["elhagy", "csere", "elore"]);
+
+export function receptHiba(recept) {
+  if (typeof recept.id !== "string" || !recept.id) return "hiányzik az `id`";
+  // Az `indok` kötelező (SKILL.md, recept-formatum.md): ez kerül a jelentésbe és a
+  // review elé. Indok nélküli recept nem alkalmazható, akkor sem, ha jóváhagyott.
+  if (typeof recept.indok !== "string" || !recept.indok.trim()) return "hiányzik az `indok` (nem üres szöveg)";
+  if (!Array.isArray(recept.muveletek) || recept.muveletek.length === 0) return "a `muveletek` nem nem-üres lista";
+  for (const [i, mv] of recept.muveletek.entries()) {
+    if (!mv || typeof mv !== "object") return `a ${i}. művelet nem objektum`;
+    if (!MUVELET_TIPUSOK.has(mv.tipus)) return `a ${i}. művelet típusa ismeretlen: ${JSON.stringify(mv.tipus)}`;
+    if (typeof mv.blokk !== "string" || !/^[0-9a-f]{12}$/.test(mv.blokk)) return `a ${i}. művelet \`blokk\`-ja nem 12 jegyű hash`;
+    if (mv.tipus === "csere" && typeof mv.helyette !== "string") return `a ${i}. (csere) műveletből hiányzik a \`helyette\` szöveg`;
+  }
+  if (recept.vedett !== undefined && !Array.isArray(recept.vedett)) return "a `vedett` nem lista";
+  if (recept.minimum_arany !== undefined && typeof recept.minimum_arany !== "number") return "a `minimum_arany` nem szám";
+  return null;
+}
+
+/**
+ * A recept műveleteinek alkalmazása. Visszaadja az új blokklistát, a naplósorokat
+ * és a ténylegesen beillesztett `helyette` szövegeket (a backstop ezeket NEM
+ * számolja a védett szövegek előfordulásai közé).
+ */
 function alkalmaz(recept, lista) {
   const naplo = [];
+  const beillesztett = [];
   let out = lista.slice();
 
   for (const mv of recept.muveletek ?? []) {
@@ -131,6 +229,7 @@ function alkalmaz(recept, lista) {
       out.splice(idx, 1);
     } else if (mv.tipus === "csere") {
       naplo.push({ tipus: "csere", blokk: mv.blokk, karakter: out[idx].length - mv.helyette.length });
+      beillesztett.push(mv.helyette);
       out[idx] = mv.helyette;
     } else if (mv.tipus === "elore") {
       const [b] = out.splice(idx, 1);
@@ -139,7 +238,7 @@ function alkalmaz(recept, lista) {
     }
   }
 
-  return { blokkok: out, naplo };
+  return { blokkok: out, naplo, beillesztett };
 }
 
 // --- Gépi visszafogás ----------------------------------------------------------
@@ -147,11 +246,19 @@ function alkalmaz(recept, lista) {
 // A jóváhagyás emberi; ez a gépi háló alatta. Két dolgot néz:
 //
 //   1. VÉDETT SZÖVEGEK. Ami az eredeti promptban benne volt és a `vedett` listán
-//      szerepel, annak az átírás után is benne kell lennie. Ezek olyan mondatok,
-//      amelyek egy subagent egész módszerét szabják — ha egy recept véletlenül
-//      elviszi őket, a subagent nem hibát jelez, hanem MÁSKÉPP dolgozik.
+//      szerepel, annak az átírás után is benne kell lennie — ugyanannyiszor.
+//      Ezek olyan mondatok, amelyek egy subagent egész módszerét szabják — ha egy
+//      recept véletlenül elviszi őket, a subagent nem hibát jelez, hanem MÁSKÉPP
+//      dolgozik. Két kiskapu volt itt, mindkettő zárva:
+//        · csak a JELENLÉTET néztük, így ha egy védett mondat két blokkban szerepelt,
+//          az egyik szabadon eltűnhetett — ezért előfordulás-számot hasonlítunk;
+//        · a recept `helyette` szövegébe írt védett mondat „visszahozta" az
+//          elvittet, más helyen és más kontextusban — ezért a beillesztett szöveg
+//          előfordulásai NEM számítanak bele.
 //   2. ARÁNY. Az átírt prompt nem lehet rövidebb az eredeti megadott hányadánál.
-//      Ez a "a recept véletlenül mindent kivágott" eset ellen véd.
+//      Ez a "a recept véletlenül mindent kivágott" eset ellen véd. A recept a
+//      globális küszöböt csak SZIGORÍTHATJA (`Math.max`), lazítani nem: a küszöb
+//      nem csökkenthető, a hibás receptet kell javítani vagy visszavonni.
 //
 // Ha bármelyik sérül, az átírás ELMARAD (a prompt eredetiben megy tovább), és a
 // napló rögzíti, melyik recept bukott meg. Csendben nem esik vissza.
@@ -163,14 +270,32 @@ const ALAP_VEDETT = [
   "szó szerint",               // a hibaüzenetek és a jelentések átvételének módja
 ];
 
-function backstop(eredeti, uj, recept, tar) {
-  const vedett = [...ALAP_VEDETT, ...(tar.vedett ?? []), ...(recept.vedett ?? [])];
+const ALAP_ARANY = 0.25;
+
+/** Nem átfedő előfordulások száma. Üres mintára 0 (különben végtelen ciklus). */
+function elofordulas(szoveg, minta) {
+  if (!minta) return 0;
+  let db = 0;
+  for (let i = szoveg.indexOf(minta); i !== -1; i = szoveg.indexOf(minta, i + minta.length)) db += 1;
+  return db;
+}
+
+const szovegLista = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === "string" && v.length > 0) : []);
+
+function backstop(eredeti, uj, recept, tar, beillesztett = []) {
+  const vedett = [...new Set([...ALAP_VEDETT, ...szovegLista(tar.vedett), ...szovegLista(recept.vedett)])];
   for (const v of vedett) {
-    if (eredeti.includes(v) && !uj.includes(v)) {
-      return `védett szöveg tűnt el: "${v}"`;
+    const elotte = elofordulas(eredeti, v);
+    if (elotte === 0) continue;
+    const csempeszett = beillesztett.reduce((a, h) => a + elofordulas(h, v), 0);
+    const utana = elofordulas(uj, v) - csempeszett;
+    if (utana < elotte) {
+      return `védett szöveg tűnt el: "${v}" (${elotte} előfordulásból ${Math.max(utana, 0)} maradt a recept saját szövegén kívül)`;
     }
   }
-  const arany = recept.minimum_arany ?? tar.minimum_arany ?? 0.25;
+  const globalis = typeof tar.minimum_arany === "number" ? tar.minimum_arany : ALAP_ARANY;
+  const sajat = typeof recept.minimum_arany === "number" ? recept.minimum_arany : 0;
+  const arany = Math.max(globalis, sajat);
   if (uj.length < eredeti.length * arany) {
     return `az átírt prompt a ${(uj.length / eredeti.length * 100).toFixed(0)}%-a az eredetinek, a küszöb ${(arany * 100).toFixed(0)}%`;
   }
@@ -235,8 +360,36 @@ function visszajatszas(azonosito, prompt) {
 
 // --- Fő ág -----------------------------------------------------------------------
 
+/**
+ * SendMessage-dzsel folytatott agent üzenete: CSAK mérés, recept soha. A recept
+ * egy delegálási prompt blokkjaira szól, a folytató üzenet pedig nem az — egy
+ * javító kör konkrét hibalistája, amiből egy blokk kiváltása épp a lényeget
+ * vinné el.
+ */
+function folytatas(input) {
+  const ti = input?.tool_input ?? {};
+  const uzenet = typeof ti.message === "string" ? ti.message : null;
+  if (!uzenet) return decide("defer");
+  const lista = blokkok(uzenet);
+  jegyez({
+    ts: new Date().toISOString(),
+    session: input?.session_id ?? null,
+    futas: futasAzonosito(input),
+    tool_use_id: input?.tool_use_id ?? null,
+    agent: null,
+    folytatas: true,
+    cel: ti.to ?? null,
+    karakter: uzenet.length,
+    token_becsles: Math.round(uzenet.length / 4),
+    blokkok: lista.map((b) => ({ h: hash(b), n: b.length })),
+    allapot: "mert",
+  });
+  return decide("defer");
+}
+
 function delegalas(input) {
   if (process.env.COST_REDUCER === "0") return decide("defer");
+  if (input?.tool_name === "SendMessage") return folytatas(input);
   if (input?.tool_name !== "Agent" && input?.tool_name !== "Task") return decide("defer");
 
   const ti = input?.tool_input ?? {};
@@ -250,6 +403,8 @@ function delegalas(input) {
   const alap = {
     ts: new Date().toISOString(),
     session: input?.session_id ?? null,
+    futas: futasAzonosito(input),
+    tool_use_id: input?.tool_use_id ?? null,
     agent,
     model: ti.model ?? null,
     karakter: prompt.length,
@@ -261,18 +416,53 @@ function delegalas(input) {
 
   elonezet(lista);
 
-  const tar = readJson(RECEPTEK, { verzio: 1, receptek: [] });
-  const recept = (tar.receptek ?? []).find((r) => illeszkedik(r, agent, hashek));
+  // A recept-ág minden hibája (sérült receptfájl, váratlan alak) mérési sorral és
+  // átírás NÉLKÜL zár: fail-open, és a hiba a naplóban látszik, nem csak egy
+  // elveszett exit 1-ben.
+  let receptId = null;
+  try {
+    return receptAg({ prompt, ti, agent, lista, hashek, alap, jelol: (id) => (receptId = id) });
+  } catch (e) {
+    jegyez({ ...alap, allapot: "hiba", recept: receptId, ok: `recept-hiba: ${e?.message ?? String(e)}` });
+    return decide("defer");
+  }
+}
+
+function receptAg({ prompt, ti, agent, lista, hashek, alap, jelol }) {
+  const nyers = readJson(RECEPTEK, null);
+  const tar = nyers && typeof nyers === "object" && !Array.isArray(nyers) ? nyers : { receptek: [] };
+  const receptek = Array.isArray(tar.receptek) ? tar.receptek : [];
+  const recept = receptek.find((r) => illeszkedik(r, agent, hashek));
 
   if (!recept) {
     jegyez({ ...alap, allapot: "mert" });
     return decide("defer");
   }
+  jelol(recept.id ?? null);
 
-  const { blokkok: ujLista, naplo } = alkalmaz(recept, lista);
+  const semaHiba = receptHiba(recept);
+  if (semaHiba) {
+    jegyez({ ...alap, allapot: "hiba", recept: recept.id ?? null, ok: `érvénytelen recept: ${semaHiba}` });
+    return decide("defer");
+  }
+
+  const { blokkok: ujLista, naplo, beillesztett } = alkalmaz(recept, lista);
   const uj = ujLista.join("\n\n");
 
-  const baj = backstop(prompt, uj, recept, tar);
+  // Hatástalan recept: egyetlen művelete sem talált blokkot (vagy csak a már elöl
+  // álló blokkot tette előre). Ilyenkor NINCS átírás és NINCS `allow` — különben a
+  // hook egy semmit nem változtató recept nevében kerülné meg az engedélykérést, és a
+  // `join("\n\n")` közben a promptot is átnormalizálná (blokkközök, sorvégi szóköz).
+  const valtozott =
+    naplo.length > 0 &&
+    uj !== prompt &&
+    (ujLista.length !== lista.length || ujLista.some((b, i) => b !== lista[i]));
+  if (!valtozott) {
+    jegyez({ ...alap, allapot: "mert", recept: recept.id, ok: "a recept egyetlen művelete sem változtatott a prompton" });
+    return decide("defer");
+  }
+
+  const baj = backstop(prompt, uj, recept, tar, beillesztett);
   if (baj) {
     jegyez({ ...alap, allapot: "elutasitva", recept: recept.id, ok: baj });
     return decide("defer");
@@ -306,15 +496,35 @@ function delegalas(input) {
 
 // --- Belépési pont ------------------------------------------------------------------
 
-const input = readInput();
+/**
+ * Ismeretlen mód: ne akadályozzuk a munkát, de LÁTSZÓDJON. A stderr exit 0 mellett
+ * néma (a harness nem mutatja), ezért egy `systemMessage` megy ki — szándékosan
+ * `permissionDecision` NÉLKÜL, hogy a hívás sorsáról ne mondjon semmit.
+ */
+function ismeretlenMod() {
+  process.stdout.write(
+    JSON.stringify({
+      systemMessage:
+        `kontextus-mero.mjs: ismeretlen mód "${MODE}" — a delegálások mérése és a receptek KI vannak kapcsolva. ` +
+        "Javítsd a `.claude/settings.json` bekötését (`delegalas`).",
+    }),
+  );
+  process.exit(0);
+}
 
-switch (MODE) {
-  case "delegalas":
-    delegalas(input);
-    break;
-  default:
-    // Ismeretlen mód: ne akadályozzuk a munkát, csak jelezzük. Ugyanaz a
-    // konvenció, mint a `spec-guard.mjs`-ben — és ugyanaz a csapda is: egy
-    // elgépelt mód-string némán kikapcsolja a mérést.
-    decide("defer", `Ismeretlen kontextus-mérő mód: "${MODE}".`);
+if (FOPROGRAM) {
+  try {
+    const input = readInput();
+    switch (MODE) {
+      case "delegalas":
+        delegalas(input);
+        break;
+      default:
+        ismeretlenMod();
+    }
+  } catch {
+    // Utolsó háló: egy váratlan hiba sem adhat exit 1-et és sem akaszthatja meg a
+    // delegálást. Kimenet nélkül zár (a belső `defer` megfelelője).
+    process.exit(0);
+  }
 }

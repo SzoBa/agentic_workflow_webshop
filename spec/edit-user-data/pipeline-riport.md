@@ -4,7 +4,7 @@ Az implementációs lánc futásának naplója és a
 [`docs/scenario-catalog/scenario-katalogus-edit-user-data.md`](../../docs/scenario-catalog/scenario-katalogus-edit-user-data.md)
 nyolc forgatókönyve elleni értékelés.
 
-**Mérés dátuma:** 2026-08-02 · **Ág:** `feature/pipeline` · **Körök száma:** 2
+**Mérés dátuma:** 2026-08-02 · **Körök száma:** 2
 
 ## Módszertani megjegyzés — mit kapott a lánc, és mit nem
 

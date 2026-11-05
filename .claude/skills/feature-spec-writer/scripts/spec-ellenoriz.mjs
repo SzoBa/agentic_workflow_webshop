@@ -2,7 +2,7 @@
 // Egy frissen megírt `spec/{feature}/` mappa validátora — a `feature-spec-writer`
 // 5. fázisának eszköze.
 //
-// Nyolc ellenőrzés, mind olyan hibaosztályra, ami NÉMA: a spec olvasva rendben van,
+// Kilenc ellenőrzés, mind olyan hibaosztályra, ami NÉMA: a spec olvasva rendben van,
 // az implementáló elindul rajta, és csak a validátornál — vagy egy review-ban —
 // derül ki, hogy egy kritériumot nem lehet megítélni, vagy senki nem csinálta meg.
 //
@@ -15,6 +15,8 @@
 //   6. kipipált checkbox — a `spec/` norma, nem munkanapló
 //   7. megengedő megfogalmazás a kritériumban („elrejtheti", „célszerű", …)
 //   8. holt belső hivatkozás (`.md` link a mappán belülről)
+//   9. ütköző fájlnevek — csak kis/nagybetűben eltérő, vagy ugyanarra a kiterjesztés
+//      nélküli importra feloldódó útvonalak a tervben (egymással és a meglévőkkel)
 //
 // A 4. a legfontosabb: egy kritérium, amihez nem vezet feladat, csöndben kimarad az
 // implementációból, és a lánc végén a validátor jelenti be — a legdrágább helyen.
@@ -201,6 +203,91 @@ for (const [nev, lines] of fajlok) {
         hiba(nev, i + 1, `Holt hivatkozás: \`${cel}\` nem létezik.`);
       }
     }
+  }
+}
+
+// --- 9. ütköző fájlnevek --------------------------------------------------------
+//
+// MEGTÖRTÉNT (2026-10-25): egy terv `client/src/kupon.ts` és `client/src/Kupon.tsx`
+// mintájú fájlpárt írt elő egy mappába. Kis/nagybetűre érzéketlen fájlrendszeren
+// (Windows, macOS) a kiterjesztés nélküli `./Kupon` import a `.ts`-re oldódott fel —
+// a build `TS2305`/`TS1261` hibával állt meg, és az implementáló csak egy `.jsx`
+// utótagos importtal tudta megkerülni. A spec
+// szövegéből ez nem látszik, csak a fájlrendszeren — ezért gépi ellenőrzés.
+//
+// Két eset HIBA ugyanabban a mappában:
+//   - két név csak kis/nagybetűben tér el (azonos kiterjesztés) → fájlütközés;
+//   - két JS/TS modul törzse kis/nagybetű nélkül azonos → az import kétértelmű.
+// A spec útvonalait a már létező fájlokkal is összeveti.
+
+const MODUL_KITERJESZTES = new Set(["ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"]);
+
+function bontas(p) {
+  const i = p.lastIndexOf("/");
+  const mappa = i === -1 ? "" : p.slice(0, i);
+  const nev = i === -1 ? p : p.slice(i + 1);
+  const j = nev.lastIndexOf(".");
+  return { mappa, nev, torzs: j <= 0 ? nev : nev.slice(0, j), kit: j <= 0 ? "" : nev.slice(j + 1) };
+}
+
+function utkozik(a, b) {
+  if (a.nev === b.nev) return null;
+  if (a.torzs.toLowerCase() !== b.torzs.toLowerCase()) return null;
+  if (a.kit.toLowerCase() === b.kit.toLowerCase()) return "csak kis/nagybetűben tér el — kis/nagybetűre érzéketlen fájlrendszeren ugyanaz a fájl";
+  if (MODUL_KITERJESZTES.has(a.kit.toLowerCase()) && MODUL_KITERJESZTES.has(b.kit.toLowerCase())) {
+    return "a kiterjesztés nélküli import mindkettőre feloldódhat — kis/nagybetűre érzéketlen fájlrendszeren a feloldó a kiterjesztések sorrendje szerint választ";
+  }
+  return null;
+}
+
+const tervUtak = new Map(); // útvonal → első előfordulás { fajl, line }
+for (const nev of ["plan.md", "tasks.md"]) {
+  const lines = fajlok.get(nev);
+  if (!lines) continue;
+  for (let i = 0; i < lines.length; i += 1) {
+    for (const m of lines[i].matchAll(/`([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)(?::[\d-]+)?`/g)) {
+      const p = m[1];
+      if (p.includes("..") || p.startsWith("spec/")) continue;
+      if (!tervUtak.has(p)) tervUtak.set(p, { fajl: nev, line: i + 1 });
+    }
+  }
+}
+
+const jelzett = new Set();
+const utak = [...tervUtak.keys()];
+for (let x = 0; x < utak.length; x += 1) {
+  const a = bontas(utak[x]);
+  // (a) a spec két útvonala egymással
+  for (let y = x + 1; y < utak.length; y += 1) {
+    const b = bontas(utak[y]);
+    if (a.mappa.toLowerCase() !== b.mappa.toLowerCase()) continue;
+    const ok = utkozik(a, b);
+    if (!ok) continue;
+    const kulcs = [utak[x], utak[y]].sort().join("|");
+    if (jelzett.has(kulcs)) continue;
+    jelzett.add(kulcs);
+    const hol = tervUtak.get(utak[y]);
+    hiba(hol.fajl, hol.line, `Ütköző fájlnevek: \`${utak[x]}\` és \`${utak[y]}\` — ${ok}. Nevezd át az egyiket.`);
+  }
+  // (b) a spec útvonala egy már létező fájllal
+  const lemezMappa = join(REPO, a.mappa);
+  if (!existsSync(lemezMappa)) continue;
+  let meglevok = [];
+  try {
+    meglevok = readdirSync(lemezMappa);
+  } catch {
+    continue;
+  }
+  for (const f of meglevok) {
+    const b = bontas(`${a.mappa}/${f}`);
+    if (tervUtak.has(`${a.mappa}/${f}`)) continue; // azt az (a) ág már nézte
+    const ok = utkozik(a, b);
+    if (!ok) continue;
+    const kulcs = [utak[x], `${a.mappa}/${f}`].sort().join("|");
+    if (jelzett.has(kulcs)) continue;
+    jelzett.add(kulcs);
+    const hol = tervUtak.get(utak[x]);
+    hiba(hol.fajl, hol.line, `Ütköző fájlnév a meglévővel: \`${utak[x]}\` és a már létező \`${a.mappa}/${f}\` — ${ok}. Nevezd át az újat.`);
   }
 }
 

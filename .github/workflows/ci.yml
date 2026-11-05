@@ -130,8 +130,9 @@ jobs:
       # csomagolt fájlokat és a nem létező skillre mutató `skills:` bejegyzést.
       #
       # A szkript CSAK `HIBA`-ra bukik (exit 1). A `FIGYELEM` mérlegelést kér,
-      # nem javítást, ezért nem viszi pirosra a CI-t — jelenleg 0 HIBA /
-      # 4 FIGYELEM.
+      # nem javítást, ezért nem viszi pirosra a CI-t. A `--mind` a hookokat is
+      # lefuttatja minden módban (ideiglenes CLAUDE_PROJECT_DIR-ben), és HIBA, ha
+      # bármelyik `defer`-t ad ki vagy összeomlik.
       - name: Skill- és agent-ellenőrzés (.claude/)
         run: node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind
 
@@ -539,7 +540,16 @@ jobs:
           path: ./
           # Üres base = a teljes git-történet átvizsgálása (nem csak egy diff).
           base: ""
-          extra_args: --results=verified,unknown
+          # A JDBC detektor KI VAN ZÁRVA. Mérve 2026-10-25: a 3.99.7-es detektor a
+          # jelszó NÉLKÜLI `jdbc:postgresql://localhost:5432/webshop` URL-re (ci.yml,
+          # application.yml, .env.example) `unknown` eredményt ad („missing host or
+          # password in connection string") — ugyanerre a történetre a 3.96.0 0
+          # találatot ad. A találatok az első commitban vannak, így soron belüli
+          # `trufflehog:ignore` nem segít: a teljes történetet szkennelő kör a régi
+          # commitban újra megtalálja. Ár: egy jelszót TARTALMAZÓ JDBC URL-t sem fog
+          # meg — ezt a spec 7.6 (jelszó csak környezetből, DATABASE_PASSWORD) és a
+          # Semgrep `p/secrets` csomagja fedi. A többi detektor friss marad.
+          extra_args: --results=verified,unknown --exclude-detectors=JDBC
 
   # ---------------------------------------------------------------------------
   # SCA: ismert sebezhetőségek a FÜGGŐSÉGEKBEN (OSV-adatbázis).

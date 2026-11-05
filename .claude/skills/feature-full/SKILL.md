@@ -18,15 +18,19 @@ description: |
 # feature-full — egy mondattól tesztekkel fedett kódig
 
 A bemenet **egy mondat**: egy feature-igény. A kimenet **implementált, e2e-vel és unit
-tesztekkel is fedett, validált kód**, futási naplóval. A kettő közt négy meglévő darab áll
+tesztekkel is fedett, validált kód**, futási naplóval. A kettő közt öt meglévő darab áll
 sorba, és ez a skill a sorrendjükért, az átadásokért és a javító körökért felel.
 
 ```
 egy mondat
     │
+    indulás              ──►  tiszta README/OpenAPI? más feature futásjelzője? (különben megállás)
+    │
  0. feature-spec-writer  ──►  spec/{feature}/          ⟵ ITT beszélgetsz a fejlesztővel
-    │                         (kapu: spec-ellenoriz.mjs zöld)
- 1. napló létrehozása    ──►  docs/orchestration/{feature}/Running.md
+    │                         (kapu: spec-ellenoriz.mjs zöld → feature/{feature} branch
+    │                          + futásjelző → spec-commit)
+ 1. napló és lánc-terv   ──►  docs/orchestration/{feature}/Running.md + kiinduló állapot
+    │                         + Orchestrator.md (generálva a plan.md 5. szakaszából)
     │
  2. feature-implement    ──►  kutató → impl ∥ e2e → integráció → e2e futás → validátor
     │                         (a saját javító hurkával együtt)
@@ -40,7 +44,7 @@ egy mondat
     │
  6. zárókör              ──►  ha a 4. terméki hibát tárt fel: spec-implementer → újravalidálás
     │
- 7. jelentés
+ 7. záró commit, stack leállítása, futásjelző törlése, jelentés
 ```
 
 Minden felhasználónak szánt szöveg **magyar** (a projekt konvenciója szerint).
@@ -83,23 +87,68 @@ egymástól függetlenül bukhat és zöldülhet — a jelentésben **külön** 
   kész-kritériumhoz sem, az javaslat a jelentés végén.
 - **Push soha**, branch-törlés soha, `reset --hard` soha.
 
-**Kivételek az írási és a git-tilalom alól — pontosan öt:**
+**Kivételek az írási és a git-tilalom alól — pontosan tizenkettő:**
 
 1. `docs/orchestration/{feature}/Running.md` — a futási napló, a te munkaterületed.
 2. `docs/orchestration/{feature}/UiSelectors.md` — a befagyasztott UI-kiválasztói szerződés
    (a `feature-implement` 2/b. lépése írja).
-3. **Commit és merge** — a 2. fázis worktree-inek egyesítése (a `feature-implement` 4. lépése
-   szerint), és a 4–5. fázis unit tesztjeinek commitolása. **Push egyik sem.**
-4. `server-java/pom.xml` — **kizárólag** a `check-unit-tested-classes` végrehajtás
+3. **Branch-nyitás**: `git switch -c feature/{feature}`, ha a repó a default branchen áll
+   (lásd „Indulás").
+4. **A spec-mappa commitja** — kizárólag a `spec/{feature}/` tartalma, egy commitban, a zöld
+   `spec-ellenoriz.mjs` után és az 1. fázis előtt (meglévő, de commitolatlan specnél a
+   `feature-implement` 0/c. lépésének 2. pontja szerint, ugyanígy az 1. fázis előtt). Enélkül a 2. fázis
+   `HEAD`-ből ágaztatott worktree-iben nincs megbízás, és a `feature-implement` 3/a.
+   lépésének ellenőrzése (`ls …/spec/{feature}` a munkafában) megállítaná a láncot.
+5. **Worktree-kezelés**: `git worktree add -b`, `git worktree remove`, `git worktree prune` —
+   a 2. fázis munkafáira: az implementálói munkafák + az e2e ág (alapesetben `{feature}-impl` és
+   `{feature}-e2e`; a D esetben toldalék nélküli `{feature}-impl` nincs, csak csomagonként egy
+   `{feature}-impl-{X}` — a `feature-implement` 3/a., 3/b. és 4/5. lépése szerint), és a 4. fázis
+   osztályonkénti munkafáira, ha a unit-teszt kör párhuzamosan fut
+   (`references/unit-teszt-kor.md` 4/b.).
+6. **Worktree-commit és az eredmény átvétele** — a 2. fázis ágainak (az implementálói munkafák +
+   az e2e ág, a D esetben csomagonként) commitja és merge-e (a
+   `feature-implement` 4. lépése), és a párhuzamos unit-teszt munkafák commitja, valamint a
+   tesztfájlok és a teszttervek (`docs/test-plans/<Osztály>.md`) átvétele a fő fára
+   (`git checkout <ág> -- <útvonalak>`, a 4/b. szerint).
+7. `server-java/pom.xml` — **kizárólag** a `check-unit-tested-classes` végrehajtás
    `<includes>` listájának **bővítése** (5. fázis). A küszöb értékéhez, a plugin
    verziójához és bármi máshoz a fájlban **nem nyúlsz**.
-5. A gyökér `README.md` és a gyökér OpenAPI-leíró — **nem te írod**, hanem a
+8. A gyökér `README.md` és a gyökér OpenAPI-leíró — **nem te írod**, hanem a
    `docs-api-writer` a 4. fázis párhuzamos ágán. A kivétel arra vonatkozik, hogy ez a két
-   fájl a lánc futása alatt **megváltozhat**, és a commitba is bekerül. Ha az agent
+   fájl a lánc futása alatt **megváltozhat**, és a záró commitba is bekerül. Ha az agent
    megakadt, a jelentés mondja ki — a dokumentumot **te nem javítod ki helyette**, mert
    akkor a leltár-kapu mérése kikerülne a láncból.
+9. **A záró commit** (7/a. fázis) — egyetlen commit, a tartalma ott felsorolva.
+10. `docs/orchestration/{feature}/Orchestrator.md` — a lánc terve, amit az 1. fázis
+    **generál** (`references/orchestrator-sablon.md`). Meglévőt nem írsz felül.
+11. `.scratch/futas-merleg/aktiv-futas.json` — a futásjelző („Indulás" 3.): a lánc elején
+    írod, a végén és minden korai megállásnál törlöd. A `.scratch/` gitignore-olt.
+12. `docs/orchestration/_kontextus/receptek.json` — **csak** egy, a 3. fázisban a fejlesztő
+    által **jóváhagyott** recept mentése (a `cost-reducer` mentési fázisa írja). A recept
+    döntés, mint a `Decision.md`: verziókövetett, és a 7/a. záró commitba kerül. Jóváhagyás
+    nélkül a fájl nem változhat.
 
-Minden más fájlra és minden más git-műveletre a tilalom él.
+**Push egyik sem.** Minden más fájlra és minden más git-műveletre a tilalom él.
+
+## Indulás — mielőtt a 0. fázis elkezdődik
+
+1. **Tiszta dokumentáció.** Ha a `git status --porcelain -- README.md openapi.yaml` nem üres,
+   **állj meg** és jelentsd: ezt a két fájlt a 4. fázis `docs-api-writer`-e írja, és a záró
+   commitba kerülnek — a fejlesztő commitolatlan módosítása velük együtt menne, és a
+   kiinduló állapothoz vett diff sem választaná szét a kettőt.
+2. **Branch.** Ha a repó a default branchen áll, nyiss feature-branchet
+   (`git switch -c feature/{feature}`) — a default meghatározása és a „már létezik → állj meg
+   és kérdezz" szabály a `feature-implement` 0/c. lépésében van. **Mikor:** amint a feature
+   neve rögzült — meglévő specnél azonnal, új specnél a 0. fázis végén, a spec-commit
+   **előtt** (a commitolatlan spec-mappa a váltással együtt jön). A spec-commit így már a
+   feature-branchre kerül, a default branchre soha.
+3. **Futásjelző** (`.scratch/futas-merleg/aktiv-futas.json`) — a szabály a `feature-implement`
+   0/c. lépésének 0. pontjában van, két időpontra bontva. Az **ellenőrzést azonnal**, a
+   0. fázis előtt végzed: ha friss jelző áll egy **másik** feature nevével, állj meg és
+   kérdezz, mielőtt a fejlesztő a spec-kikérdezésbe fektetne. A **megírás** a 2. ponttal egy
+   időben történik, amint a feature neve rögzült — akkor is, ha branch-nyitás nem kell. A
+   0. fázis esetleges delegálásai így még a session-azonosítóra könyvelődnek; a lánc futása
+   a jelzőtől indul.
 
 ---
 
@@ -109,9 +158,12 @@ Minden más fájlra és minden más git-műveletre a tilalom él.
 
 Ha a fejlesztő **feature-igényt** adott (nincs még spec-mappa): töltsd be a
 `feature-spec-writer` skillt a `Skill` eszközzel, és vidd végig. A fázis akkor kész, ha a
-`spec-ellenoriz.mjs` **zölden** lefutott — `HIBA` esetén nem mész tovább.
+`spec-ellenoriz.mjs` **zölden** lefutott — `HIBA` esetén nem mész tovább. Utána, ebben a
+sorrendben: branch-nyitás („Indulás" 2.) és a futásjelző („Indulás" 3.), majd a spec-commit
+(4. kivétel).
 
-Ha a fejlesztő **meglévő spec-mappát** nevezett meg: ez a fázis kimarad. Mondd ki, és lépj az
+Ha a fejlesztő **meglévő spec-mappát** nevezett meg: ez a fázis kimarad. Mondd ki, nyisd meg a
+branchet („Indulás" 2.), írd meg a futásjelzőt („Indulás" 3.), ha a mappa commitolatlan, commitold (4. kivétel), és lépj az
 1. fázisra. **Meglévő specet nem íratsz át** — a `feature-spec-writer` maga is megtagadja, és
 jó okkal: egy lezárt lánc-futás után a módosítás visszamenőleg meghamisítja a mérleget.
 
@@ -125,13 +177,44 @@ Ha a mappa létezik, de féllábon áll (nincs benne követelmény- **és** fela
 Hozd létre a `docs/orchestration/{feature}/Running.md` fájlt **kitöltetlenül**, még az első
 delegálás előtt. Ez nem formaság: a `feature-implement` 1/c. lépése **ennek a fájlnak a
 létéhez** köti a naplóvezetést. Ha nincs meg, a 2. fázis naplózás nélkül fut, és a mérés
-utólag nem pótolható.
+utólag nem pótolható. Ha a fájl egy **korábbi** futásból már létezik, nem írod felül: alá
+nyitsz egy dátumozott futás-blokkot (a sablon „Ha a `Running.md` már létezik" szakasza).
 
-Töltsd ki a 0. blokkot (mit döntött el a spec-írás), majd lépj tovább.
+**A létrehozás előtt** — a spec-commit után — vedd fel a kiinduló állapotot, és írd a fejléc
+mezőibe:
 
-`Orchestrator.md`-t **ne** írj. Annak hiánya azt jelenti, hogy a 2. fázis az alapértelmezett
-lánc-alakot használja — ez a helyes viselkedés. Az `Orchestrator.md` a spec-írás terméke,
-nem a futásé.
+- a **kiinduló commitot** (`git rev-parse HEAD`). A 4. fázis jelöltkeresője ehhez képest nézi
+  a változást, a munkafa commitolatlan módosításaival együtt — így a javító körökben módosult
+  osztály sem marad ki. A 2. fázis végén vett HEAD a merge utáni állapot volna, amihez képest
+  a diff üres.
+- a **kiinduló `git status --porcelain`** teljes kimenetét. A `feature-implement` 4/1.
+  ellenőrzése („csak az engedélyezett fájlok változtak") és a 7/a. záró commit ehhez képest
+  diffel: ami itt már piszkos volt, az a fejlesztőé, nem a láncé.
+- a **futás-azonosítót** — a futásjelző `futas` mezőjét, vagy a `FUTAS_AZONOSITO` értékét,
+  ha az be van állítva („Indulás" 3.). A 3. fázis futásmérlege ezzel a névvel kérdez.
+
+Ezzel a `feature-implement` 0/c. lépése el van végezve — a 2. fázisban csak ellenőrzi.
+
+Töltsd ki a 0. blokkot (mit döntött el a spec-írás), majd generáld a lánc tervét.
+
+#### 1/b. Az `Orchestrator.md` generálása
+
+`references/orchestrator-sablon.md` — a váz, a levezetési szabály és a kérdezés esetei.
+
+A `docs/orchestration/{feature}/Orchestrator.md`-t **te generálod**, még az első delegálás
+előtt, a `plan.md` 5. szakaszának („Munkacsomagok és függőségeik") csomagjaiból és
+függőségeiből: egy csomag → az alapértelmezett lánc (A), egymásra épülő csomagok →
+szekvenciális csomagonkénti implementálás (C), **független csomagok → párhuzamos javaslat**
+(D). Ha a levezetés nem egyértelmű (a sablon felsorolja, mikor), **kérdezz** — a választ a
+fájl „Levezetés" bekezdésébe és a `Running.md` 0. blokkjába is beírod.
+
+Ez nem a spec-írás terméke, és szándékosan nem: a `plan.md`-t minden subagent normaként
+olvassa, ezért abban csak munka-tény áll (mi a csomag, mire épül), a delegálás nem. A lánc
+alakja az orchestrátor döntése, és olyan fájlba kerül, amit egyik subagent sem lát.
+
+Ha az `Orchestrator.md` **már létezik** (kézzel írták, vagy egy korábbi futás generálta), nem
+írod felül: azt követi a 2. fázis, és a `Running.md` „Kiinduló állapot" blokkjába beírod, hogy
+meglévő tervvel indult a lánc.
 
 ### 2. Az implementációs lánc
 
@@ -141,7 +224,9 @@ mappára. Ami onnan érvényes, azt itt nem ismételjük meg — a 0/b–7. lép
 - a spec beolvasása és a kész-kritérium forrásának azonosítása,
 - a **modell-triázs** (1/b.) — a spec méretétől függő modellválasztás,
 - a `spec-researcher` delegálása és a **UI-kiválasztói szerződés befagyasztása**,
-- a **párhuzamos ág** két külön worktree-ben, az `isolation` paraméter nélkül,
+- a **párhuzamos ág** külön worktree-kben (az implementálói munkafák + az e2e ág), az
+  `isolation` paraméter nélkül,
+- a merge utáni **kötelező** build, teszt és lint az egyesített fán (4/6.),
 - az integráció, az e2e futtatás és a `spec-validator` ítélete,
 - a **javító hurok** (7. lépés, legfeljebb 2 kör) — ez az, amit a fejlesztő „a validátor
   hibáit adja vissza az implementálónak" alatt ért, és **már benne van** a behívott skillben.
@@ -150,18 +235,41 @@ Amit ehhez **hozzáteszel**, mert a `feature-implement` önmagában nem tudhatja
 
 - A naplót **te** hoztad létre (1. fázis), tehát a naplóvezetés él — a `Running.md` blokkjait
   a behívott skill 1/c. lépése szerint töltsd.
-- A fázis végén jegyezd fel, **melyik commit** volt a lánc kiindulópontja (`git rev-parse`),
-  mert a 4. fázis jelöltkeresője ehhez képest nézi a változást.
+- Az `Orchestrator.md`-t is te generáltad (1/b.), tehát a behívott skill 0/b. lépése azt
+  találja, és **az** szabja meg a delegálások számát, sorrendjét és párhuzamosságát.
+- A behívott skill **8. lépése (zárás) kimarad**: a stack futva marad a 6. fázis
+  újravalidálásáig, és a záró commit a 7/a. fázisé. A stack-szabály (ha nem a lánc indította,
+  a merge és minden backend-javítás után a fejlesztőtől kéred az újraindítást) a
+  `feature-implement` 5/2. pontjában van, és itt is él.
 - Ha a validátor mérlegében a **körkorlát után is** maradt `[nem teljesül]` pont, **állj meg**,
   és a 3–6. fázist ne indítsd el. Unit teszttel fedni egy olyan implementációt, amiről tudjuk,
-  hogy nem teljesíti a specet, a hibát betonozná be. Jelentsd, és add vissza a döntést.
+  hogy nem teljesíti a specet, a hibát betonozná be. Jelentsd, és add vissza a döntést —
+  a 7/a. korai megállás szabálya szerint (stack, futásjelző).
 
 ### 3. Kontextus- és futásmérleg — a lánc egyetlen tervezett megállása
 
 ```
 node .claude/skills/cost-reducer/scripts/merleg.mjs
-node .claude/skills/futas-merleg/scripts/futas-merleg.mjs
+node .claude/skills/futas-merleg/scripts/futas-merleg.mjs --futas <futásnév>
 ```
+
+A `--futas <futásnév>` (`{feature}-<ÉÉÉÉHHNN-ÓÓPP>`, a `Running.md` „Kiinduló állapot” blokkjából)
+a ledgerben **ennek a láncnak** a sorait választja: a hook a futásjelző („Indulás" 3.) miatt a
+futásnévre könyvelt, nem a session-azonosítóra. Ha a
+`FUTAS_AZONOSITO` be volt állítva, annak értéke a név (a `Running.md` „Kiinduló állapot"
+blokkjában áll). Argumentum nélkül a script a ledger összes futását listázná, és egy régi
+futás sorai elfednék, hogy a mostaniból semmi nem érkezett.
+
+**Alapból `--atirat` nélkül.** Az `--atirat <a session átirata>` a session `<session-id>.jsonl`
+fájlját olvasná a Claude Code projektmappájában — a munkaterületen **kívül**, ahová a
+fejlesztő globális szabálya szerint natív eszközzel csak az ő kifejezett engedélyével lehet
+nyúlni. A következmény: a lánc **utolsó**, még nem egyeztetett delegálása (jellemzően a
+2. fázis záró validátora) a riportból **hiányozhat** — a `PreToolUse` hook egy delegálást csak a
+következő delegálás előtt egyeztet, így a konvergenciagörbéből épp az utolsó kör eshet ki. Ezt
+a jelentésben és a napló 7/b. blokkjában **jelezd** („az utolsó delegálás egyeztetés nélkül —
+`--atirat` nem futott"). Az `--atirat` csak akkor használható, ha a fejlesztő `AskUserQuestion`-re
+**kifejezetten jóváhagyta**; akkor a `--futas` mellett az egyeztetett sorok is a futásnévre
+kerülnek.
 
 **A két mérleg két külön dolgot mond, és nem helyettesítik egymást.** A `merleg.mjs` a
 delegálásokba **bemenő prompt** karaktereit méri (mit lehetne szűkíteni); a `futas-merleg.mjs` a
@@ -196,9 +304,21 @@ csinál.
 
 Írd **mindkét** mérleg **tényleges** kimenetét a napló 7. blokkjába.
 
-A `futas-merleg`-nek nincs „nem volt elég adat" esete: az első delegálástól kezdve mér. Ha a
-riport üres, az nem adathiány, hanem **hiba** — a hook nincs bekötve, vagy `FUTAS_KERET=0` van
-beállítva. Ezt mondd ki, ne hallgasd el.
+A `futas-merleg`-nek nincs „nem volt elég adat" esete: az első delegálástól kezdve mér. A
+riportnak a **mostani** futás delegálásait kell tartalmaznia (a 2. fázis kutatóját,
+implementálóját, e2e-íróját és validátorát — vesd össze a `Running.md` delegálás-blokkjaival;
+`--atirat` nélkül az utolsó, még nem egyeztetett delegálás hiánya **várt**, a fenti jelzéssel).
+A `2`-es kilépési kód hibás hívás (nem létező átirat, üres napló, **ismeretlen futásnév**),
+nem riport. Ha a script szerint nincs ilyen nevű futás, a session-azonosítóval
+viszont van, a hook nem látta a jelzőt (hiányzott, 6 óránál régebbi volt, vagy hibás a
+tartalma) — ez **hiba**, nem adathiány. Ugyanígy, ha a riport üres vagy kevesebb delegálást
+mutat, mint a `Running.md` (az egy, még nem egyeztetett utolsó delegáláson túl): a hook nincs
+bekötve, vagy `FUTAS_KERET=0` van beállítva. Ezt mondd ki, ne hallgasd el.
+
+Egy feature **újrafuttatása** új futásnevet kap (más időbélyeg), tehát a ledgerben és a hook
+költségkeretében külön futás. Ha a korábbival együtt akarod látni, a `futas-merleg.mjs`
+argumentum nélkül mindkettőt listázza; ha a `Running.md`-ben korábbi futás-blokk is van, a
+jelentésben nevezd meg mindkét futásnevet.
 
 ### 4. A dokumentációs ág — a unit-teszt körrel párhuzamosan
 
@@ -230,7 +350,49 @@ A vázlat, hogy tudd, mire számíts:
    `spec-implementer`-rel, majd **teljes** újravalidálás. Legfeljebb 2 kör, a 2. fázis
    köreitől külön számolva.
 
-### 7. Jelentés
+### 7. Zárás és jelentés
+
+#### 7/a. Záró commit — egyetlen, ezzel a tartalommal
+
+A lánc **egyetlen** záró commitja, a 6. fázis után (kliens-only feature-nél a 4. fázis
+dokumentációs ága után — a záró commit ott is jár). Az implementáció és az e2e alapja a
+2. fázis merge-commitjaiban már bent van; ez a commit mindazt viszi, ami **azóta** a fő fán
+változott:
+
+- az implementáció és az e2e **javító köreinek** változásai — a 2. fázis 7. lépéséből és a
+  6. fázisból (`client/`, `server-java/src/main/`, `e2e/`),
+- a **unit tesztek** (`server-java/src/test/`) — sorban futott körnél a fő fán keletkeztek,
+  párhuzamosnál a 4/b. átvétele hozta őket,
+- a **teszttervek** (`docs/test-plans/<Osztály>.md`) — osztályonként egy, a unit tesztekkel
+  ugyanúgy (sorban futott körnél a fő fán, párhuzamosnál a 4/b. átvételével),
+- a `server-java/pom.xml` `<includes>` listájának bővítése (5. fázis),
+- a gyökér `README.md` és `openapi.yaml` (4. fázis, `docs-api-writer`),
+- `docs/orchestration/_kontextus/receptek.json`, ha a 3. fázisban a fejlesztő receptet
+  **jóváhagyott** (12. kivétel) — a recept döntés, mint a `Decision.md`,
+- `docs/orchestration/{feature}/Running.md`, `UiSelectors.md`, és az `Orchestrator.md`, ha
+  ez a futás generálta (1/b.).
+
+**Nem** kerül bele: a két mérő-napló (`docs/orchestration/_kontextus/meresek.jsonl`,
+`futasok.jsonl` — a hook minden sessionben írja őket, a commitjuk a fejlesztőé), a
+gitignore-olt `.scratch/`, és semmi, ami már a kiinduló `git status`-ban szerepelt. A
+fájlokat **név szerint** add hozzá (`git add -- <útvonalak>`), ne `-A`-val: a mostani
+`git status --porcelain` és a kiinduló lista különbsége a jelölt, és abból is csak a fenti
+felsorolás. Ha ezen kívül más is változott, **állj meg** és jelentsd — az egy sávjából kilépett
+ág nyoma.
+
+Előtte: ha a lánc indította a stacket, **most** állítsd le (a Postgres-konténer marad), a
+futásjelzőt töröld (`rm -f .scratch/futas-merleg/aktiv-futas.json`), és a `Running.md`
+„Zárás" blokkját töltsd ki — a commit hash-e a jelentésbe kerül, nem a naplóba. Ha maradt
+`[nem teljesül]` pont vagy 90% alatti osztály, a commit akkor is megtörténik, de az üzenete
+kimondja. **Push nincs.**
+
+Ha a lánc **korábban** áll meg (a 2. fázis körkorlátja, a futásmérleg-kapu `deny`-ja, egy
+„állj meg és kérdezz" pont, ami után a fejlesztő nem folytatja), a stacket akkor is
+leállítod, ha a lánc indította, és a futásjelzőt **akkor is törlöd** — egy ottfelejtett jelző
+6 órán át a következő session delegálásait is erre a futásra könyveli, a költségkeretével
+együtt. A záró commit ilyenkor a fejlesztő döntése — kérdezz.
+
+#### 7/b. Jelentés
 
 ```markdown
 # Kész: {feature} — spectől unit tesztekig
@@ -244,9 +406,12 @@ A vázlat, hogy tudd, mire számíts:
   leltár-kapu kilépési kód {0 | 1, és mi maradt piros}
 - Javító körök: implementációs {N} · unit-teszt eredetű {M}
 - Konvergencia ([nem teljesül] körönként): {5 → 2 → 0} {| `?` = marker nélküli kör}
-- Fogyasztás: {N} költség-egység ≈ {X} USD (arak.json, {dátum}) — a keret {P}%-a · subagent-idő {T} perc
+- Fogyasztás (futás: `{futás-azonosító}`): {N} költség-egység ≈ {X} USD (arak.json, {dátum}) — a keret {P}%-a · subagent-idő {T} perc {· az utolsó delegálás egyeztetés nélkül — `--atirat` nem futott | `--atirat` a fejlesztő jóváhagyásával}
+- Felbontás: `Orchestrator.md` — {generálva, logika {A | C | D} | meglévő terv}
 - Kontextus-mérleg: {N} recept jóváhagyva | nem volt elég adat
 - Validátor-mérleg: X teljesül / Y nem teljesül / Z kétséges
+- Branch: `feature/{feature}` · kiinduló commit `{hash}` · záró commit `{hash}` ({N} fájl)
+- Stack: {a lánc indította, leállítva | már futott, nem nyúltam hozzá}
 - Futási napló: `docs/orchestration/{feature}/Running.md`
 
 ---
@@ -272,6 +437,7 @@ nyíltan** — ne jelentsd késznek. A „tesztekkel fedett kód" és a „napra
 Fázisonként olvasd be, ne előre:
 
 - `references/futasi-naplo-sablon.md` — az 1. fázis: a `Running.md` váza és a tilalmai
+- `references/orchestrator-sablon.md` — az 1/b. fázis: az `Orchestrator.md` váza és levezetése
 - `references/dokumentacios-ag.md` — a 4. fázis párhuzamos fele: README + OpenAPI-leíró
 - `references/unit-teszt-kor.md` — a 4–6. fázis: jelöltek, delegálás, kapu, zárókör
 - `scripts/unit-jeloltek.mjs` — a 4/a. fázis jelöltkeresője

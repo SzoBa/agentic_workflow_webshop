@@ -17,6 +17,7 @@ export default tseslint.config(
       "client/dist/**",
       "server-java/**",
       ".scratch/**",
+      ".claude/worktrees/**",
       ".run/**",
       "e2e/reports/**",
     ],
@@ -83,11 +84,11 @@ export default tseslint.config(
       sourceType: "module",
     },
     rules: {
-      // A konformancia-esetek futtató-szignatúrája FIX: `async run({ client, boot })`.
-      // Mind a 13 eset ugyanazt a formát viseli, akkor is, ha egyikük-másikuk
-      // csak a `boot`-ot használja — a szignatúra a katalógus szerződése, nem
-      // maradék kód. Ezért az argumentumok itt nincsenek ellenőrizve; a nem
-      // használt VÁLTOZÓ viszont továbbra is hiba.
+      // A konformancia-esetek futtató-szignatúrája a katalógus szerződése
+      // (`async run({ client, boot })` vagy `async run({ client })`): a destrukturált
+      // argumentum nem maradék kód, akkor sem, ha egy eset nem használja. Ezért az
+      // argumentumok itt nincsenek ellenőrizve; a nem használt VÁLTOZÓ viszont
+      // továbbra is hiba.
       "no-unused-vars": ["error", { args: "none" }],
       "no-useless-assignment": "off",
     },
@@ -110,6 +111,25 @@ export default tseslint.config(
     },
     rules: {
       "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
+    },
+  },
+
+  // --- A .claude/ gépi fele és a regressziós tesztjei ---
+  //
+  // A hookok (spec-guard, a két mérő) a lánc biztonsági és költségkapui: egy
+  // elgépelt változónév bennük nem lint-hiba, hanem egy némán kieső őr. Ezért
+  // ugyanaz a recommended szabálykészlet fut rájuk, mint a többi Node-szkriptre.
+  {
+    files: [".claude/hooks/**/*.mjs", ".claude/skills/**/scripts/**/*.mjs", "test/hooks/**/*.mjs"],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: "module",
+    },
+    rules: {
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],
+      // Ugyanaz a döntés, mint a kliensnél: a „később úgyis felülírjuk” kezdőérték marad.
+      "no-useless-assignment": "off",
     },
   },
 );

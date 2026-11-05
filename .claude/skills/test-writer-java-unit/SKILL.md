@@ -30,6 +30,32 @@ only after asking.
 - If the target file is over ~800 lines or ~25 methods, stop and propose splitting the work into
   batches before starting.
 
+## Running several writers at once
+
+One working tree holds **one** unit-test writer at a time. Two writers in the same tree share
+`target/`, so one's `mvn clean` deletes the other's `jacoco.exec` mid-run, and the CSV either
+writer reads then belongs to neither run — a plausible number, not a measured one.
+
+To cover several classes in parallel:
+
+- **One class per git worktree** (`.claude/worktrees/<name>/`). Each writer measures only inside its
+  own tree. In this repo the orchestrating chain creates that worktree itself, from the feature
+  branch's `HEAD`; do **not** use the Agent tool's `isolation: "worktree"` for it — that branches
+  from the default branch, so the tree would not contain the feature under test.
+- **No shared fixture extraction in a worktree.** Phase 3 step 3 (promoting a helper to
+  `support/<Domain>TestData.java`) is skipped: two trees creating or editing the same `support/`
+  file collide at merge. Keep helpers private to the test class and name the promotion candidate in
+  the report; it is done once, after the merge, in the main tree.
+- **The plan travels with the worktree commit.** `docs/test-plans/<Class>.md` is versioned, so the
+  same `git add -A` + commit that carries the test class out of the worktree carries the plan too,
+  and it reaches the main tree with the rest of the branch — no manual copy. You do not commit
+  (whoever adopts the branch does); just leave the plan in the worktree next to the test class.
+  Anything you put under the gitignored `.scratch/` instead is *not* in that commit and is deleted
+  with the worktree.
+- **The reported coverage number comes from the merged tree.** A per-worktree number measures that
+  tree alone; after merging, run **one** unfiltered `mvn clean test` in the main tree and take every
+  class's branch % — and the gate's verdict — from that run only.
+
 ## Naming
 
 **Identifiers are English. Prose is whatever the project writes prose in.** Those are two separate
@@ -83,9 +109,11 @@ Read the target file once and extract **only**:
 - for each method, its **body start and end line numbers** (needed for Phase 2's partial reads)
 - a frequency table of parameter/DTO types across methods → builder candidates
 
-Then write a **test plan** to `.scratch/test-writer/<Class>.md` — agent working files live under
-`.scratch/`, which is gitignored so the plan never lands in a commit (add the entry if the project
-lacks it) — one row per method:
+Then write a **test plan** to `docs/test-plans/<Class>.md` — **versioned**, so the case derivation
+and the oddities you flag survive the run and reach review next to the test class (create the
+folder if the project lacks it, and say so in the report). If a plan for the class already exists,
+extend it — keep its history, don't overwrite it. Scratch notes that are *not* the plan still go to
+the gitignored `.scratch/`. One row per method:
 
 | method | mocks | input domain | branches (est.) | param style | shared source id | builder candidate |
 
@@ -136,11 +164,19 @@ Do not run the build between methods. Batch it into Phase 3.
 Follow `references/coverage-jacoco.md`.
 
 - Ensure JaCoCo is wired up; add it if missing, and record exactly what you changed in the build file.
-- Run tests + report, then read the **branch** numbers for the class under test from
+  **Under a guard (run as an agent, e.g. this repo's `java-unit-test-writer`) the build file is not
+  yours:** report what is missing and what you would add, and do not write it.
+- Run the unfiltered `mvn clean test` (no `-q`: the `Tests run:` summary is part of the report),
+  then read the **branch** numbers for the class under test from
   `target/site/jacoco/jacoco.csv` (a few lines — cheap). For the missed lines themselves, grep
   `jacoco.xml` for that class's `<line ... mb="N">` entries; do not read the whole XML.
 - **Gate: ≥90% branch coverage** on the class under test. Line coverage is reported alongside but is
   not the gate — 90% line coverage routinely hides half the branches.
+- **That number is the whole suite's, not your tests'.** An unfiltered run counts every branch any
+  test took — integration tests included — so it says the class is covered, not that *your unit
+  tests* cover it. Report it as the full-suite figure. If you need the unit-only figure, measure it
+  with the optional recipe in `references/coverage-jacoco.md`; it never replaces the full-suite
+  number, and the build's coverage gate is not judged on it.
 - Below the gate → return to Phase 2 for the affected methods only. Max 3 rounds.
 - Still below after 3 rounds → report the honest reason (unreachable defensive branch, generated
   `equals`/`hashCode`, private constructor, `switch` over an exhaustive enum) rather than padding.
@@ -149,7 +185,9 @@ Follow `references/coverage-jacoco.md`.
 
 - files created/modified
 - build config changes (JaCoCo, and any dependency you asked about)
-- **measured** coverage: branch % and line % for the class under test
+- **measured** coverage: branch % and line % for the class under test — labelled *full suite*
+  (and, if you ran the recipe, the *unit-only* figure next to it, labelled as such)
+- the plan file (`docs/test-plans/<Class>.md`), created or extended
 - suspicious behavior flagged in Phase 2
 - cases deliberately left uncovered, with the reason
 

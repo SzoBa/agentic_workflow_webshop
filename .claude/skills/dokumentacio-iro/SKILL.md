@@ -71,10 +71,21 @@ A kódból, a leíróból és a README-ből ugyanazt a végponthalmazt olvassa k
 HIÁNYZÓ sor. Egy végigolvasott dokumentáció mindig naprakésznek látszik, mert csak azt látod
 benne, ami benne van.
 
-A `--csak-kod` a puszta leltárt adja (akkor is működik, ha még nincs leíró); a `--json` a
-gépi alakot. A kilépési kód `1`, amíg van eltérés — ez a 4. fázis kapuja, itt még **várt**.
+A `--csak-kod` a puszta leltárt adja (akkor is működik, ha még nincs leíró), és mindig `0`-val
+lép ki — `--json`-nal együtt is, akkor összevetési mezők nélkül (`"mod": "csak-kod"`). A
+`--json` a gépi alakot adja. Kapu-módban a kilépési kód `1`, amíg van eltérés — ez a 4. fázis
+kapuja, itt még **várt**.
 
-A kimenet négyféle eltérést sorol fel. Nem egyformák:
+A kódolvasó szűk: ismeri a literál útvonalat pozicionálisan, `value =`/`path =` alakban,
+tömbként (`{"/a", "/b"}`) és több soron átnyúló annotációban, valamint a `method =`-os
+metódusszintű `@RequestMapping`-et. Amit **nem** tud kiolvasni (konstans vagy összefűzés az
+útvonalban, `method` nélküli metódusszintű `@RequestMapping`), azt `FELISMERETLEN`-ként
+kiírja, és kapu-módban ettől is piros — az alulmérés nem lehet néma.
+
+Négyféle eltérés van, és nem egyformák. A script **csak az első kettőt** (és a negyedik
+jelét, a kiolvasott műveletszámot) adja: a `spec/`-et **nem** olvassa. A harmadik sor kézi
+összevetés a `spec/backend/vegpontok.md`-vel és a feature spec-mappájával — ha kihagyod, a
+jelentés „Eltérés a `spec/`-től" szakasza üres marad, és az nem azt jelenti, hogy nincs eltérés.
 
 | Eltérés | Mit jelent | Mit csinálsz |
 |---|---|---|

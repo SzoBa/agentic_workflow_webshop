@@ -1,8 +1,7 @@
 # Termékértékelés
 
 > **Történeti spec — nem élő norma.** 2026-07-23-án készült, a **Node/Express + lowdb**
-> backendre; 2026-08-02-án került ide a `week3/Review and rating/` alól. A feature megvalósult, de
-> a mai kód a Java/Spring backend ([ADR-0006](../../docs/adr/0006-atvaltas-a-java-backendre.md)):
+> backendre. A feature megvalósult, de a mai kód a Java/Spring backend ([ADR-0006](../../docs/adr/0006-atvaltas-a-java-backendre.md)):
 > a vélemények a `server-java/src/main/java/hu/webshop/review/` csomagban élnek, három végponttal
 > — `GET /api/products/:id/reviews`, `POST /api/reviews`, `PATCH /api/admin/reviews/:id`. Az itt
 > leírt `server/…` útvonalak, a lowdb-tömb és a `db.json` **elavultak**.

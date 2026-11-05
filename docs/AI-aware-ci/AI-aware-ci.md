@@ -38,7 +38,7 @@ Blokkol: nem használt változó, `no-undef`, a React Hooks szabályai
 ES2022-es kényelmi metódusokat tiltja (`Object.hasOwn`), mert a `tsconfig`
 ES2020-ra fordít, és ezek némán elhasalnak a buildben.
 
-Nem néz `server-java/`-t (az Maven modul) és a `week*/` mappákat (kurzus-anyag).
+Nem néz `server-java/`-t (az Maven modul).
 
 ## Miért van szükség rá
 
@@ -162,11 +162,9 @@ szabálycsomagokkal fut, mert találat nélkül kalibrálni találgatás lenne.
 Egyetlen konfigurációs döntés van, és az nem szabály-kikapcsolás:
 
 - A `.semgrepignore` kizárja a `node_modules/`, `client/dist/`,
-  `server-java/target/`, `week1..4/`, `.scratch/`, `.run/` mappákat. **Fontos
+  `server-java/target/`, `.scratch/`, `.run/` mappákat. **Fontos
   csapda:** ha ez a fájl létezik, a Semgrep beépített alapértelmezett kizárásai
   NEM lépnek életbe — ezért van benne a `node_modules` is kiírva.
-- A `week*/` mappák kurzus-anyagot tartalmaznak, nem alkalmazáskódot; a rájuk
-  adott találat definíció szerint zaj.
 
 **Az első teljes futás eredménye (mérve):** 253 szabály, 248 fájl, **14 találat —
 mind WARNING, egy ERROR sem**, tehát a kapu zöld. A 14 találat mindegyike ugyanaz a

@@ -13,11 +13,24 @@
 //
 // Amit NEM ír ki, mert nem tudja: tokenszámot (csak becslést), cache-találati
 // arányt, pénzt. A harness ezeket nem adja ki a hooknak. Aki ezekre hivatkozva
-// állít megtakarítást, nem mért — csak feltételez.
+// állít megtakarítást, nem mért — csak feltételez. A valódi token-, cache- és
+// pénzadat egy szinttel lejjebb, a subagent-átiratokban megvan: azt a
+// `futas-merleg` skill (`futas-merleg.mjs`) olvassa ki.
 //
 // Használat:
 //   node .claude/skills/cost-reducer/scripts/merleg.mjs
 //   node .claude/skills/cost-reducer/scripts/merleg.mjs --agent spec-implementer
+//   node .claude/skills/cost-reducer/scripts/merleg.mjs --futas kupon-20261106-1000
+//
+// `--futas <név>`: egy lánc méréseire szűr — a sorok `futas` mezője ugyanazzal a
+// feloldással készül, mint a futásmérleg naplójáé (env > friss jelző > session), így az
+// „ismétlődő blokk" itt valóban ugyanabban a láncban ismétlődik. A mező előtti, régi
+// soroknak nincs `futas`-a: ezek csak a szűretlen mérlegben látszanak. Ismeretlen név → 2.
+//
+// A recept aktív-voltáról UGYANAZ a függvény dönt, mint a hookban (`jovahagyott()`, a
+// `kontextus-mero.mjs`-ből importálva, nem másolva). Három kategória: aktív ·
+// érvénytelen jóváhagyás (van `jovahagyva`, de nem valódi, nem jövőbeli dátum — a hook
+// NEM alkalmazza) · visszavont (nincs `jovahagyva`).
 //
 // Zéró függőség, szándékosan (a projekt szabálya: új csomag csak kérdezés után).
 
@@ -25,13 +38,32 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// A hook-modul importja ELŐTT jelezzük, hogy modulként töltjük be: így a hook-ág
+// (stdin-olvasás, kilépés) nem fut le (lásd a `kontextus-mero.mjs` fejlécét).
+globalThis.KONTEXTUS_MERO_MODULKENT = true;
+const { jovahagyott, receptHiba } = await import("../../../hooks/kontextus-mero.mjs");
+
 const REPO = process.env.CLAUDE_PROJECT_DIR
   ? resolve(process.env.CLAUDE_PROJECT_DIR)
   : resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 
 const TAR = join(REPO, "docs", "orchestration", "_kontextus");
 const argv = process.argv.slice(2);
-const szuro = argv.includes("--agent") ? argv[argv.indexOf("--agent") + 1] : null;
+const hibasHivas = (uzenet) => {
+  console.error(`Hibás hívás: ${uzenet}`);
+  process.exit(2);
+};
+// Érték nélkül a szűrő `undefined` lett, és csendben a teljes, szűretlen mérleg futott le.
+// Egy elgépelt hívás ne adjon szó nélkül más választ, mint amit kérdeztek.
+const flag = (nev, pelda) => {
+  const i = argv.indexOf(nev);
+  if (i === -1) return null;
+  const v = argv[i + 1];
+  if (v === undefined || v.startsWith("--")) hibasHivas(`a ${nev} kapcsolóhoz érték kell (pl. ${nev} ${pelda}).`);
+  return v;
+};
+const szuro = flag("--agent", "spec-implementer");
+const futasSzuro = flag("--futas", "kupon-20261106-1000");
 
 function sorok(file) {
   if (!existsSync(file)) return [];
@@ -48,7 +80,21 @@ function sorok(file) {
     .filter(Boolean);
 }
 
-const meresek = sorok(join(TAR, "meresek.jsonl")).filter((m) => !szuro || m.agent === szuro);
+const osszesMeres = sorok(join(TAR, "meresek.jsonl"));
+if (futasSzuro && !osszesMeres.some((m) => m.futas === futasSzuro)) {
+  const ismert = [...new Set(osszesMeres.map((m) => m.futas).filter(Boolean))];
+  hibasHivas(
+    `nincs mérés ezzel a futással: "${futasSzuro}". Ismertek (${ismert.length}): ` +
+      (ismert.length ? `${ismert.slice(-10).join(", ")}${ismert.length > 10 ? ", …" : ""}` : "egy sem (a régi soroknak nincs `futas` mezője)"),
+  );
+}
+const futasMeresei = osszesMeres.filter((m) => !futasSzuro || m.futas === futasSzuro);
+const meresek = futasMeresei.filter((m) => !szuro || m.agent === szuro);
+if (szuro && futasMeresei.length > 0 && meresek.length === 0) {
+  const ismert = [...new Set(futasMeresei.map((m) => m.agent ?? "(nincs megadva)"))].sort();
+  console.error(`Hibás hívás: nincs mérés ezzel az agenttel: "${szuro}". Ismertek: ${ismert.join(", ")}.`);
+  process.exit(2);
+}
 const tar = existsSync(join(TAR, "receptek.json"))
   ? JSON.parse(readFileSync(join(TAR, "receptek.json"), "utf8"))
   : { receptek: [] };
@@ -60,10 +106,10 @@ for (const b of sorok(join(REPO, ".scratch", "cost-reducer", "blokkok.jsonl"))) 
 
 if (meresek.length === 0) {
   console.log("Nincs mérés.\n");
-  console.log("A hook minden `Agent` delegálásnál ír egy sort ide:");
+  console.log("A hook minden `Agent`/`Task`/`SendMessage` delegálásnál ír egy sort ide:");
   console.log(`  ${join("docs", "orchestration", "_kontextus", "meresek.jsonl")}`);
   console.log("\nHa üres, még nem futott delegálás ebben a repóban a hook bekötése óta.");
-  console.log("Ellenőrizd a bekötést: `.claude/settings.json` → hooks.PreToolUse, matcher \"Agent|Task\".");
+  console.log("Ellenőrizd a bekötést: `.claude/settings.json` → hooks.PreToolUse, matcher \"Agent|Task|SendMessage\".");
   process.exit(0);
 }
 
@@ -71,7 +117,8 @@ const szam = (n) => n.toLocaleString("hu-HU");
 
 // --- 1. Delegálás-típusonként ---------------------------------------------------
 
-console.log(`Delegálás-mérleg — ${meresek.length} delegálás${szuro ? ` (szűrve: ${szuro})` : ""}\n`);
+const szurok = [futasSzuro ? `futás: ${futasSzuro}` : null, szuro ? `agent: ${szuro}` : null].filter(Boolean);
+console.log(`Delegálás-mérleg — ${meresek.length} delegálás${szurok.length ? ` (szűrve: ${szurok.join(", ")})` : ""}\n`);
 
 const agentek = new Map();
 for (const m of meresek) {
@@ -134,12 +181,21 @@ if (ismetlodo.length === 0) {
 
 // --- 3. Receptek ---------------------------------------------------------------------
 
-const aktiv = (tar.receptek ?? []).filter((r) => r.jovahagyva);
-const inaktiv = (tar.receptek ?? []).filter((r) => !r.jovahagyva);
+// Ugyanaz a döntés, mint a hookban: aktív = `jovahagyott(jovahagyva)`. Ami nem az, de
+// VAN `jovahagyva` értéke (`"igen"`, `true`, jövőbeli vagy nem létező dátum), az
+// érvénytelen jóváhagyás — korábban ez itt „aktív"-nak látszott, a hook pedig nem
+// alkalmazta. Csak a hiányzó (vagy üres) mező a visszavonás.
+const receptLista = (Array.isArray(tar.receptek) ? tar.receptek : []).filter((r) => r && typeof r === "object");
+const nincsJovahagyas = (r) => r.jovahagyva === undefined || r.jovahagyva === null || r.jovahagyva === "";
+const aktiv = receptLista.filter((r) => jovahagyott(r.jovahagyva));
+const ervenytelen = receptLista.filter((r) => !jovahagyott(r.jovahagyva) && !nincsJovahagyas(r));
+const inaktiv = receptLista.filter((r) => nincsJovahagyas(r));
 
-console.log(`\n\nReceptek — ${aktiv.length} aktív, ${inaktiv.length} visszavont\n`);
+console.log(
+  `\n\nReceptek — ${aktiv.length} aktív, ${ervenytelen.length} érvénytelen jóváhagyás, ${inaktiv.length} visszavont\n`,
+);
 
-if (aktiv.length === 0 && inaktiv.length === 0) {
+if (receptLista.length === 0) {
   console.log("Nincs recept. A hook mér, de nem ír át semmit.");
 } else {
   for (const r of aktiv) {
@@ -148,6 +204,15 @@ if (aktiv.length === 0 && inaktiv.length === 0) {
     console.log(`  ${r.id}  (${r.agent ?? "*"}, jóváhagyva ${r.jovahagyva})`);
     console.log(`      ${hasznalat.length}× alkalmazva, MÉRT megtakarítás ${szam(megtak)} karakter`);
     console.log(`      indok: ${r.indok ?? "(nincs megadva — ez hiányosság)"}`);
+    // A hook a jóváhagyott, de sémahibás receptet sem alkalmazza (`hiba` sort ír).
+    const sema = receptHiba(r);
+    if (sema) console.log(`      ⚠ a hook NEM alkalmazza — érvénytelen recept: ${sema}`);
+  }
+  for (const r of ervenytelen) {
+    console.log(
+      `  ${r.id}  — ÉRVÉNYTELEN JÓVÁHAGYÁS (\`jovahagyva\`: ${JSON.stringify(r.jovahagyva)} — nem valódi, ` +
+        "nem jövőbeli ÉÉÉÉ-HH-NN dátum; a hook NEM alkalmazza)",
+    );
   }
   for (const r of inaktiv) {
     console.log(`  ${r.id}  — VISSZAVONVA (nincs \`jovahagyva\` dátum, a hook nem alkalmazza)`);

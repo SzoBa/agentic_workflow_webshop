@@ -12,6 +12,7 @@ dist/
 
 # Ügynök-munkafájlok és futásidejű naplók (gitignore-olt, de helyi futtatásnál ott van)
 .scratch/
+.claude/worktrees/
 .run/
 .git/
 .idea/

@@ -86,7 +86,8 @@ ha az nincs meg, a pont NEM teljesült, akkor sem, ha a kód látszólag helyes.
 # Megvalósítási terv — {feature}
 
 {Mit rögzít ez a dokumentum, és hogy MINDKETTŐ kötelező: az interfész szerződését és a
-felbontást. Plusz: ha a szerződés hibásnak bizonyul, azt JELENTENI kell, nem javítani.}
+munkacsomagok függőségeit. Plusz: ha a szerződés hibásnak bizonyul, azt JELENTENI kell, nem
+javítani.}
 
 ## 1. HTTP-szerződés
 ### `{METÓDUS} /api/…`
@@ -99,14 +100,27 @@ van definiálva, ezért együtt módosulnak — és a tükör annak a munkacsoma
 ahol a válasz alakja születik.}
 
 ## 3. Fájltulajdon — ki mihez nyúlhat
-{Munkacsomagonként kizárólagos tulajdon. Plusz: amihez EGYIK csomag sem nyúl.}
+{Munkacsomagonként kizárólagos tulajdon. Plusz: amihez EGYIK csomag sem nyúl. Egy mappán belül
+két új fájl neve ne térjen el csak kis/nagybetűben, és két JS/TS modul törzse se legyen
+kis/nagybetű nélkül azonos (`kupon.ts` + `Kupon.tsx`): Windowson és macOS-en a
+kiterjesztés nélküli import a rosszra oldódik fel. A `spec-ellenoriz.mjs` 9. ellenőrzése ezt HIBA-ként jelzi.
+Ha **több csomag ír Flyway-migrációt**, a tábla csomagonként **külön verziószámot** oszt ki,
+a `server-java/src/main/resources/db/migration` következő szabad számától (pl. B csomag:
+`V4__…sql`, C csomag: `V5__…sql`). Különben két párhuzamos csomag ugyanazt a következő számot
+választja: a két ág külön-külön zöld, az egyesített fán a Flyway elutasítja a duplikált
+verziót, és a backend el sem indul.}
 
 ## 4. Megvalósítási döntések
 {Számozott alszakaszok. Ezek DÖNTÉSEK, nem javaslatok — az implementálónak nem kell újra
 végiggondolnia őket. Minden döntéshez INDOK, és ahol van, az elutasított alternatíva.}
 
-## 5. Felbontás — a subagentek munkamegosztása
-{Lépésenként: melyik subagent, mit kap, mit ad vissza. Ábrával.}
+## 5. Munkacsomagok és függőségeik
+{Csomagonként egy sor: a betűjel — PONTOSAN az, ami a `tasks.md` `*Gazda:*` soraiban áll —
+és egy mondat arról, mit szállít a csomag.
+Utána a függőségek, egy-egy állításként, az érintkezési felület megnevezésével:
+„F a B által írt `client/src/api.ts`-re épül."
+Végül EGY sor: mely csomagok függetlenek egymástól (párhuzamosíthatók) — vagy hogy egyik
+sem az. Egyetlen csomagnál ez a szakasz egy mondat: „Egy munkacsomag: {X}."}
 
 ## 6. Kockázatok
 {Kockázat → kezelés táblázat. A kezelés oszlop MUTASSON egy konkrét kritériumra.}
@@ -116,6 +130,14 @@ A `plan.md` legfontosabb tulajdonsága, hogy **előre** rögzül: a munkacsomago
 elkülönített, tehát amit itt nem írsz le, azt két oldal fogja egymástól függetlenül
 kitalálni. A 4. szakaszba az kerül, ami **köti** a két oldalt — nem az, ami az implementáló
 szabadsága.
+
+Az 5. szakaszba **csak munka-tény** kerül: mi a csomag, és mire épül. **Nem** kerül bele,
+hogy melyik agent kapja, milyen sorrendben delegálunk, mi fut párhuzamosan, és ki milyen
+kontextust kap. Ennek két oka van. A `plan.md`-t **minden** subagent normaként olvassa, tehát
+egy ide írt delegálási leírás minden agentnek utasításként szól — annak is, akire nem
+vonatkozik. És a szervezés nem a spec-írás döntése: a lánc alakját a `feature-full` 1. fázisa
+generálja ebből a szakaszból a `docs/orchestration/{feature}/Orchestrator.md`-be
+(`.claude/skills/feature-full/references/orchestrator-sablon.md`), amit egyik subagent sem lát.
 
 ---
 
@@ -151,5 +173,8 @@ A checkboxokat SENKI nem pipálja ki: a `spec/` mappa a norma, nem munkaterület
 - Az **`*Érintett:*`** sor a `plan.md` fájltulajdon-táblázatával legyen összhangban.
 - **Minden kész-kritériumra hivatkozzon legalább egy munkaegység.** Amelyikre nem, azt nem
   fogja senki megcsinálni — a validátor pedig mérni fogja.
+- A **„Függőségi sorrend"** a munkaegységek szintjén beszél; a csomagok közti függőségek a
+  `plan.md` 5. szakaszában vannak. A kettő nem mondhat ellent egymásnak, és itt sincs
+  agent-név vagy delegálási sorrend.
 - A záró csomag az **átvétel**: a kritériumlista tételes végigmérése, a dinamikus ellenőrző
   parancsok futtatása, és — ha van — az end-to-end forgatókönyv végigjátszása.

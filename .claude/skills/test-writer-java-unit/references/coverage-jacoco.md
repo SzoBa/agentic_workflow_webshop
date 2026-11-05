@@ -7,13 +7,27 @@ The gate is **branch coverage** on the class under test. Line coverage is report
 the gate: a class can sit at 90% lines with half its branches untaken, which is exactly the gap this
 skill exists to close.
 
+**What the number measures:** an unfiltered run counts every branch *any* test took — in a project
+with integration tests, theirs too. So the figure says the class is covered by the suite, not that
+the unit tests you wrote cover it. Report it as the **full-suite** figure; the unit-only figure is a
+separate, optional measurement (see *Optional: the unit-only figure* below).
+
 ## Detect the build
 
 | file present | build tool | test command | report path |
 | --- | --- | --- | --- |
-| `pom.xml` | Maven | `mvn -q test jacoco:report` | `target/site/jacoco/jacoco.{csv,xml}` |
+| `pom.xml` | Maven | `mvn clean test` | `target/site/jacoco/jacoco.{csv,xml}` |
 | `build.gradle` / `.kts` | Gradle | `./gradlew test jacocoTestReport` | `build/reports/jacoco/test/jacoco.{csv,xml}` |
-| `pom.xml` + `mvnw` | Maven wrapper | `./mvnw -q test jacoco:report` | as Maven |
+| `pom.xml` + `mvnw` | Maven wrapper | `./mvnw clean test` | as Maven |
+
+**Never pass `-q` to Maven here.** Quiet mode suppresses Surefire's `Tests run: N, Failures: …`
+summary — the line the report has to quote, and the only place the `Tests run: 0` trap below is
+visible. A quiet green build and a build that ran nothing look identical.
+
+No `jacoco:report` on the command line either, *if* the `pom.xml` binds a `report` execution to the
+`test` phase (this repo's `server-java/` does, and so does the snippet below) — the goal would only
+run twice. Append it only for a project whose JaCoCo plugin has `prepare-agent` but no bound
+`report`; check with a grep for `<goal>report</goal>` before deciding.
 
 Multi-module: run from the module that holds the class under test, or pass `-pl <module>` / use the
 module's Gradle task path. Verify the binary and the executable exist (`mvn -v`, `./gradlew -v`) before
@@ -89,8 +103,95 @@ announces itself: the build stays green.
   data in place, so the CSV reports coverage that the tests you just ran did not produce. Use
   `mvn clean test` when the number is going into a report.
 
+- **A coverage gate may already be bound to `test`.** If the `pom.xml` has a `jacoco:check`
+  execution (this repo's `server-java/` does: `check-unit-tested-classes`, 90% branch on a class
+  list — a **regression gate over the whole suite**: it counts the branches the integration tests
+  take as well, so it does not certify the unit tests' quality), a *filtered* run is judged on whatever `jacoco.exec` happens to hold — the classes your
+  filter did not run keep the previous runs' data (append), or none at all after a `clean`. So the
+  same command is red or falsely green depending on history, never because of your tests.
+  Measured 2026-11-06 in `server-java/`: `mvn test -Dtest=ClientIpResolverTest
+  -DfailIfNoSpecifiedTests=false` on a stale `jacoco.exec` → 17 tests green, then
+  `BUILD FAILURE` on `Rule violated for class hu.webshop.order.OrderTransitions: branches covered
+  ratio is 0.00` (the other nine listed classes passed on leftover data).
+
+  **Iterate with `-Djacoco.skip=true`.** Measured on the same command: exit 0, `Tests run: 17`,
+  all three JaCoCo executions print `Skipping JaCoCo execution because property jacoco.skip is
+  set`, and `prepare-agent` logs `argLine set to empty` — so the surefire `@{argLine}` placeholder
+  resolves to an empty string and the fork starts normally. (That is JaCoCo 0.8.14's
+  `prepare-agent` behaviour under `skip`; a pom whose `argLine` uses `@{argLine}` *without* any
+  `prepare-agent` execution would need an empty `<argLine></argLine>` property to stay runnable.)
+  Skipped means *no* coverage data: state numbers only from an unfiltered `mvn clean test`.
+
 Filtered runs are still fine for *iterating* on a flat (non-nested) test class. They are not fine for
 producing the number you state in Phase 5.
+
+## Optional: the unit-only figure
+
+Use this only when someone asks how much of a class **the unit tests alone** cover (e.g. to tell a
+class that is genuinely unit-tested from one the integration tests carry). It is an extra
+measurement, reported *next to* the full-suite figure, never instead of it — and the build's gate
+does **not** change: `check-unit-tested-classes` stays a full-suite regression gate.
+
+The trick is to exclude the integration tests **without `-Dtest`**, so `@Nested` classes still run:
+Surefire's `excludesFile` drops classes by pattern while leaving discovery otherwise untouched.
+
+1. **Build the exclude list from the source, transitively.** In `server-java/` the integration tests
+   extend `hu.webshop.support.IntegrationTest` either directly or through an abstract
+   `*TestSupport` base (`CatalogTestSupport`, `OrderTestSupport`, `ReviewTestSupport`). Grep
+   `src/test/java` for `extends IntegrationTest`, then repeat with every abstract base you found
+   until the set stops growing — a direct-only grep misses 11 concrete classes here. Write one pattern per line
+   (`**/AccountApiTest.java`; `#` lines are comments) into the project's gitignored `.scratch/` folder —
+   `.scratch/unit-only/excludes.txt` at the project root, never a path outside the project (a
+   guarded writer may not write there, and it is not where the next reader looks).
+   Measured 2026-11-06: 30 lines — 27 concrete classes plus the 3 abstract bases.
+2. **Run it clean, unfiltered otherwise** (from `server-java/`):
+   `mvn clean test "-Dsurefire.excludesFile=<project root>/.scratch/unit-only/excludes.txt"` — the
+   **absolute** path of that file (Surefire resolves a relative one against `server-java/`, not the
+   project root); no `-Dtest`, no `-q`.
+3. **Prove it measured what you think** — the build stays green either way:
+   - `Tests run:` in the *Results* summary is > 0, and `target/surefire-reports/` holds only the
+     unit classes (list the `TEST-*.xml` names; no excluded class may appear).
+   - **The `@Nested` classes ran.** The outer class's `TEST-<Class>.xml` carries
+     `<testsuite … tests="0">` — that attribute counts only the outer class's own methods — but
+     inside it there are `<testcase classname="…<Class>$<Nested>">` elements. Count *those*; the
+     `tests` attribute alone would make a correct run look empty.
+   - **No database started**: the log has no Testcontainers/Postgres lines. (An integration test
+     that slipped through would need Docker and fail or start a container — either is visible.)
+4. Read the class rows from `jacoco.csv` as usual and label them **unit-only**.
+5. **Run a plain `mvn clean test` afterwards**, so `target/` reflects the full suite again — a
+   unit-only `jacoco.csv` left behind is exactly the plausible-but-wrong number this file warns about.
+
+If `jacoco:check` goes red in this mode, that is a *finding*, not a build problem: the listed class
+depends on integration tests for part of its coverage. Note which class, and rerun with
+`-Djacoco.haltOnFailure=false` (JaCoCo's documented `check` switch; not exercised here, because the
+measured run passed) to get the report.
+
+**Measured 2026-11-06** (`server-java/`, Surefire 3.5.4, JaCoCo 0.8.14, Docker *not* running):
+exit 0, 17 s, `Tests run: 5661, Failures: 0, Errors: 0` (5283 of them `CatalogWindowTest`'s
+parameterised cases), 17 report files, all unit classes. The nine `@Nested`-structured classes
+(`JsonInputTest`, `ProductFilterTest`, `ProductValidatorTest`, `UserValidatorTest`, and the five in
+`security/`) reported `tests="0"` on the outer suite and 310 `$`-nested `<testcase>` elements between
+them. Zero Testcontainers/Postgres/Docker lines in the log. `jacoco:check` printed
+`All coverage checks have been met.` Unit-only BRANCH on the ten gated classes:
+
+| class | unit-only branch | line |
+| --- | --- | --- |
+| `auth.ClientIpResolver` | 18/18 = 100% | 23/23 |
+| `auth.UserValidator` | 38/38 = 100% | 39/39 |
+| `catalog.ProductFilter` | 8/8 = 100% | 22/22 |
+| `catalog.ProductValidator` | 34/34 = 100% | 45/45 |
+| `common.JsonInput` | 42/42 = 100% | 23/23 |
+| `order.OrderTransitions` | 4/4 = 100% | 9/9 |
+| `security.AdminInterceptor` | 4/4 = 100% | 16/16 |
+| `security.AuthInterceptor` | 6/6 = 100% | 16/16 |
+| `security.CurrentUserArgumentResolver` | 6/6 = 100% | 7/7 |
+| `security.SessionService` | 18/18 = 100% | 32/34 |
+
+So today the gated classes are carried by their unit tests alone. The module as a whole is
+246/653 = 37.7% branch unit-only, against 563/653 = 86.2% for the full suite (the clean full-suite
+run quoted in the `pom.xml`, same day) — the gap is what the integration tests contribute elsewhere. That tells you nothing about tomorrow: the gate still
+measures the full suite, so a unit test could lose a branch that an integration test happens to
+take, and the gate would stay green. That is the case this recipe exists to catch, on demand.
 
 ## Reading the report cheaply
 

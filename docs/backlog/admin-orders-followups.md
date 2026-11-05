@@ -183,7 +183,8 @@ integrációs tesztbe nem: *„egy integrációs teszt ugyanazokat az ágakat m�
 varratot igényelne a tesztelhetőséghez, azt jelenti, nem refaktorálja.
 
 **Kész, ha:** a JaCoCo **mért** branch-lefedettsége az osztályra ≥ 90%, és a terv a
-`.scratch/test-writer/AdminOrderQueryService.md`-ben van.
+`docs/test-plans/AdminOrderQueryService.md`-ben van (2026-11-06 óta verziókövetett hely; korábban
+`.scratch/test-writer/`).
 
 > **Részben elévült (2026-07-31), a tétel marad nyitva.** A **D3** javítása közben a `filter()` és a
 > `contains()` megszűnt: a szűrés a lekérdezésbe került. A helyükre lépő tiszta függvénynek már van

@@ -50,27 +50,38 @@ hooks:
           args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/spec-guard.mjs", "impl-write"]
 ```
 
-A `spec-guard.mjs` négy módot ismer (a fájl végi `switch (MODE)`-ból, a fejléce is felsorolja):
+A `spec-guard.mjs` nyolc módot ismer (a fájl végi `switch (MODE)`-ból, a fejléce is felsorolja):
 
 | Mód | Kit véd, mitől |
 |---|---|
-| `impl-write` | az implementáló írásai: a spec-mappa és a Flyway-migrációk tiltva |
-| `impl-bash` | az implementáló parancsai: git-mutáció és függőségtelepítés tiltva |
+| `impl-write` | az implementáló írásai: a spec-mappa és a **meglévő** Flyway-migrációk tiltva (új `V<n>__` fájl létrehozható) |
+| `impl-bash` | az implementáló (és a generikus író agentek) parancsai: git-mutáció és függőségtelepítés tiltva, a parancs írási céljaira az `impl-write` szabályai |
+| `e2e-bash` | az e2e-teszt-író parancsai: az `impl-bash` tiltásai + a Bash-írási célokra az `e2e-write` engedélylistája |
+| `unit-test-bash` | a Java unit-teszt-író parancsai: az `impl-bash` tiltásai + a Bash-írási célokra a `unit-test-write` engedélylistája |
 | `readonly-bash` | a validátor parancsai: **engedélylista**, ami nincs rajta, az `ask` |
 | `e2e-write` | az e2e-teszt-író írásai: csak a saját mappája írható |
+| `unit-test-write` | a Java unit-teszt-író írásai: csak a szerver teszt-forrásfája (és a `.scratch/`); produkciós kód és `pom.xml` tiltva |
+| `docs-write` | a dokumentáció-író írásai: csak a gyökér `README.md` és a gyökér OpenAPI-leíró (és a `.scratch/`) |
 
-**A csapda:** ismeretlen módra a hook `defer`-t ad, azaz átengedi a hívást. Egy elgépelt
+Új agentnél előbb nézd meg, fedi-e valamelyik — új mód csak akkor kell, ha egyik sem.
+
+**A csapda:** ismeretlen módra a hook belső `defer` ítéletet hoz, azaz átengedi a hívást. Egy elgépelt
 mód-string tehát **nem hibázik, hanem kikapcsolja az őrt** — a futás zöld, a védelem nulla.
 Emiatt van rá gépi ellenőrzés (`ellenoriz.mjs` 4.), és emiatt kell **minden** hook-bekötés után
-lefuttatni.
+lefuttatni. A módlistát a validátor a hook `switch (MODE)`-jából olvassa, nem saját listából —
+egy hookba felvett új mód tehát magától ismert lesz. A `--mind` a `.claude/settings.json`
+`hooks` blokkját is így vizsgálja (`kontextus-mero.mjs delegalas`, `futas-mero.mjs kapu`).
 
 Két további dolog a hookról, mielőtt ráépítesz:
 
 - **Nem sandbox.** Elvi okból hiányos: a tiltólista véges felsorolás egy végtelen halmazról. A
   véletlen szabálysértést fogja el, a szándékosat nem. A hook fejléce ezt részletesen kifejti —
   olvasd el, mielőtt biztonsági garanciaként hivatkozol rá.
-- **A hook sosem ad `allow`-t**, csak `deny` / `ask` / `defer`-t, hogy a felhasználó saját
-  engedélyezési beállításait ne írja felül.
+- **A hook sosem ad `allow`-t**, csak `deny` / `ask`-ot, hogy a felhasználó saját
+  engedélyezési beállításait ne írja felül. A „nem ítélek" eset (belső `defer`) **kimenet
+  nélküli exit 0** — a `defer` szót kiírni tilos: a Claude Code 2.1.310 óta az elhalasztja a
+  hívást, és a háttér-subagent hibaüzenet nélkül megáll (`CLAUDE.md`, „Delegation cost").
 
 Ha új mód kell, azt a hookban kell felvenni (`switch (MODE)` + a fejléc módlistája), és **utána**
-hivatkozni rá az agentben — fordítva a validátor jogosan bukik.
+hivatkozni rá az agentben — fordítva a validátor jogosan bukik. A hookot **nem** a `skill-iro`
+írja (lásd „Nem alku tárgya"): az új mód javaslatként kerül a jelentésbe, a fejlesztő veszi fel.

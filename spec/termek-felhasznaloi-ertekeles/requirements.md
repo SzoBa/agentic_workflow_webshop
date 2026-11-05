@@ -1,11 +1,11 @@
 # Termék felhasználói értékelése — saját értékelés lekérése (GET)
 
 > **Történeti spec — nem élő norma, és a leírt végpont ma NEM létezik.** 2026-07-25-én készült, a
-> **Node/Express + lowdb** backendre; 2026-08-02-án került ide a `week3/` alól. A `tasks.md`
+> **Node/Express + lowdb** backendre. A `tasks.md`
 > kipipált checkboxai szerint akkor megvalósult, de a Java-újraírás
 > ([ADR-0006](../../docs/adr/0006-atvaltas-a-java-backendre.md)) **nem vitte át**: külön `ratings`
 > kollekció nincs, az értékelés a vélemény egyik mezője (`ReviewEntity.rating`), és a
-> [22 végpont](../backend/vegpontok.md) között nincs `GET /api/products/:id/ratings/me`.
+> [mai végpontok](../backend/vegpontok.md) között nincs `GET /api/products/:id/ratings/me`.
 > A dokumentumban szereplő `server/…` útvonalak és lowdb-részletek **elavultak**.
 > A backend viselkedésének élő normája a [`spec/backend/`](../backend/requirements.md).
 > Ha a saját értékelés lekérése újra kell, az **új** feature: `feature-spec-writer`, új

@@ -160,6 +160,11 @@ target/
 
 # Ügynök-munkafájlok (pl. a test-writer-java-unit skill tesztterve)
 /.scratch/
+# A lánc worktree-i: a munkakönyvtáron belül, hogy a háttér-agentek Read/Edit hívásai
+# ne kérjenek engedélyt (feature-implement 3/a.).
+/.claude/worktrees/
+# Helyi, gépenkénti Claude Code-beállítás — a megosztott a .claude/settings.json.
+/.claude/settings.local.json
 
 # Az e2e teszt-váz HTML riportja és bukáskori képernyőképei
 /e2e/reports/

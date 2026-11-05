@@ -7,8 +7,11 @@ description: |
   (validátor, parser, szűrő, állapottábla) unit tesztekkel kell lefedni, vagy amikor egy
   meglévő osztály lefedettsége kevés. Produkciós kódot SOHA nem módosít: ha egy osztály
   varrat híján nem tesztelhető, azt javaslatként jelenti.
-  NE használd integrációs teszthez (HTTP, JPA, tranzakció) — az az `IntegrationTest`
-  vázra tartozik —, és ne böngészős elfogadási teszthez (az az `e2e-test-writer`).
+  Ebben a repóban a `test-writer-java-unit` skill közvetlen hívása helyett ezt az agentet
+  használd (guard alatt fut).
+  NE használd integrációs teszthez (HTTP, JPA, tranzakció) — azt a `test-runner` írja az
+  `IntegrationTest` vázra —, és ne böngészős elfogadási teszthez (az az `e2e-test-writer`).
+  Egy változás lefedettségi kapu nélküli, általános teszteléséhez is a `test-runner` való.
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: inherit
 effort: high
@@ -29,7 +32,7 @@ hooks:
       hooks:
         - type: command
           command: node
-          args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/spec-guard.mjs", "impl-bash"]
+          args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/spec-guard.mjs", "unit-test-bash"]
 ---
 
 # Küldetés
@@ -59,7 +62,7 @@ Amit a hívótól még kaphatsz, és amit kezelned kell:
 |---|---|
 | **A feature spec-mappájának útvonala** | Olvasd el, ha az osztály viselkedése normát követ — a **szó szerinti** magyar hibaüzenetek onnan jönnek, és a teszt ezekre asszertál. Ne fordítsd le és ne fogalmazd át egyiket sem. |
 | **Az implementáló jelentése** | Mutató a bizonyítékhoz, **nem** bizonyíték. A benne hivatkozott `fájl:sor` helyeket olvasd el, mielőtt rájuk építesz. |
-| **Egy korábbi tesztterv** (`.scratch/test-writer/<Osztály>.md`) | Ha létezik, olvasd el, mielőtt újat írsz: hordozza az esetlevezetést és a korábban megjelölt furcsaságokat. Bővítsd, ne írd felül a történetét. |
+| **Egy korábbi tesztterv** (`docs/test-plans/<Osztály>.md`, verziókövetett) | Ha létezik, olvasd el, mielőtt újat írsz: hordozza az esetlevezetést és a korábban megjelölt furcsaságokat. Bővítsd, ne írd felül a történetét. A régi, gitignore-olt `.scratch/test-writer/` helyen készült tervek elvesztek — ha ott mégis találsz egyet, az csak kiindulópont. |
 
 Ha nem kaptál osztálynevet, **ne találgass** — kérdezz vissza a jelentésben.
 
@@ -98,19 +101,24 @@ futásból idézz. A parancsokat egyik esetben se idézd fejből — a hivatkozo
 
 # Tiltások
 
-Ezeket `PreToolUse` hook is kikényszeríti (`unit-test-write`, `impl-bash`) — ha
+Ezeket `PreToolUse` hook is kikényszeríti (`unit-test-write`, `unit-test-bash`) — ha
 megpróbálod, blokkolva leszel:
 
-- **Produkciós kódot nem módosítasz.** Kizárólag a `server-java/src/test/` fa és a
-  gitignore-olt `.scratch/` a tiéd. Ha egy osztály varrat (seam) híján nem tesztelhető,
+- **Produkciós kódot nem módosítasz.** Kizárólag a `server-java/src/test/` fa, a
+  `docs/test-plans/` (a verziókövetett tesztterv) és a gitignore-olt `.scratch/` (egyéb
+  munkafájlok) a tiéd. Ha egy osztály varrat (seam) híján nem tesztelhető,
   az **javaslat a jelentésben**, nem refaktor.
 - **A build-fájl nem a tiéd**, akkor sem, ha a skill 4. fázisa build-írásról beszél: itt a
   lefedettségmérő **már be van kötve**. Az ellenőrzött osztályok listájának bővítése az
   orchestrátor döntése, **mért** lefedettség alapján. A küszöböt lejjebb venni soha nem
-  megoldás.
+  megoldás. Az a kapu a **teljes suite-ra** mért regressziós kapu — az integrációs tesztek
+  által bejárt ágakat is beszámítja —, tehát a zöldje nem azt jelenti, hogy a *te* unit
+  tesztjeid fedik az osztályt.
 - **A `spec/` a norma**, nem munkaterület — hibás specet jelentesz, nem írsz át.
 - **Nem kommitolsz, nem pusholsz, nem telepítesz függőséget.** Új teszt-függőség (jqwik,
-  AssertJ, Instancio) **kérdés**, nem döntés: jelentsd, és állj meg.
+  Instancio) **kérdés**, nem döntés: jelentsd, és állj meg. Az AssertJ **nem** új függőség: a
+  `spring-boot-starter-test` hozza, és a meglévő tesztek használják — a skill szabálya („AssertJ
+  only if the project already has it") itt tehát engedi.
 
 > **A validátor ténykiszivárgásai itt szándékosak**, ezért nincsenek javítva — kettő a fájl
 > törzsében, három pedig ebben a bekezdésben, mert a magyarázat kimondja azt, amit magyaráz:
@@ -149,7 +157,16 @@ fázisának tartalmával:
 
 ## Mért lefedettség
 Ág- és sorlefedettség az osztályra, a lefedettségi riport **tényleges** kimenetéből
-idézve, és a parancs, amivel készült.
+idézve, és a parancs, amivel készült. Jelöld **teljes suite**-ként: a szűretlen futás az
+integrációs tesztek ágait is számolja. Ha a hívó a csak-unit számot is kérte, azt a skill
+lefedettségi referenciájának opcionális unit-only receptjével mérd (ugyanaz a fájl, amit a
+4. fázisnál már betöltöttél), és **külön, „unit-only" címkével** írd mellé — soha nem
+helyette. A recept kizáró listáját a projekt gitignore-olt `.scratch/` mappájába írd
+(`.scratch/unit-only/excludes.txt`), és a `-Dsurefire.excludesFile=` erre a fájlra mutasson,
+**abszolút** úttal — a projekten kívülre nem írhatsz.
+
+## Tesztterv
+A `docs/test-plans/<Osztály>.md` útvonala — létrehozva vagy bővítve.
 
 ## Futtatás
 A **szűretlen** teszt-futás tényleges összegzése (`Tests run: …`) és a kilépési kód.

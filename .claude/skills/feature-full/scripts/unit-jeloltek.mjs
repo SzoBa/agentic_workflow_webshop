@@ -94,9 +94,15 @@ function git(args) {
   return execFileSync("git", args, { cwd: REPO, encoding: "utf8" });
 }
 
+// A változás az `alap` és a MUNKAFA között — nem `alap...HEAD`. A `feature-implement`
+// 7. lépésének javító körei a fő fán futnak, commit nélkül; a három pontos alak csak a
+// commitolt változást látná, és a csak javító körben módosult osztály kimaradna. A még
+// nem követett (új) fájlokat a `git diff` nem mutatja, ezért azokat külön vesszük fel.
 function valtozottFajlok(alap) {
-  const ki = git(["diff", "--name-only", "--diff-filter=AM", `${alap}...HEAD`]);
-  return ki.split("\n").map((s) => s.trim()).filter(Boolean);
+  const sorok = (ki) => ki.split("\n").map((s) => s.trim()).filter(Boolean);
+  const modositott = sorok(git(["diff", "--name-only", "--diff-filter=AM", alap]));
+  const uj = sorok(git(["ls-files", "--others", "--exclude-standard"]));
+  return [...new Set([...modositott, ...uj])];
 }
 
 /** A `jacoco:check` `check-unit-tested-classes` végrehajtásában felsorolt osztályok. */
@@ -209,7 +215,7 @@ for (const rel of javaFajlok) {
 const rang = { JELÖLT: 0, "MÁR FIGYELT": 1, GYENGE: 2, KIZÁRVA: 3 };
 sorok.sort((a, b) => rang[a.itelet] - rang[b.itelet] || b.agak - a.agak);
 
-const forras = fajlokKapcsolo ? "megadott fájllista" : `git diff ${alap}...HEAD`;
+const forras = fajlokKapcsolo ? "megadott fájllista" : `git diff ${alap} (munkafa, új fájlokkal)`;
 process.stdout.write(
   `Unit-teszt jelöltek — forrás: ${forras}\n` +
     `${javaFajlok.length} változott produkciós Java osztály\n\n`,

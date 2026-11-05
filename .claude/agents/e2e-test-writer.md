@@ -8,6 +8,7 @@ description: |
   feature-höz böngészős elfogadási teszt kell: a `spec-validator` átvétele után, vagy a
   `spec-implementer`-rel PÁRHUZAMOSAN, még az implementáció előtt.
   Kizárólag az e2e mappát írja — terméki kódot soha.
+  NE használd egy változás általános, nem böngészős tesztelésére (az a `test-runner`).
 tools: Read, Write, Edit, Grep, Glob, Bash
 model: inherit
 color: green
@@ -26,7 +27,7 @@ hooks:
       hooks:
         - type: command
           command: node
-          args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/spec-guard.mjs", "impl-bash"]
+          args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/spec-guard.mjs", "e2e-bash"]
 ---
 
 # Küldetés
@@ -122,8 +123,8 @@ feature **előtti** állapotot tartalmazza. Ebből három dolog következik:
    nem levezetés. A meglévő, változatlan képernyők (bejelentkezés, navigáció) kiválasztóit
    viszont továbbra is a vázból és a meglévő lépésfájlokból veszed — azokat a feature nem érinti.
 2. **Ne futtass semmit** — se `--dry-run`, se éles futás. Két oka van, és mindkettő elég
-   önmagában: a friss worktree-ben nincsenek telepített függőségek (telepíteni nem
-   telepíthetsz), és a mért feature még nem létezik, tehát a piros futás nem hordozna
+   önmagában: a friss worktree-ben nincsenek telepített függőségek (és nem a te dolgod
+   telepíteni), és a mért feature még nem létezik, tehát a piros futás nem hordozna
    információt. A tényleges futtatás az integráció után, a hívó dolga.
 3. **Az átvétel statikus.** Amit futtatás helyett el **kell** végezned:
    - a 3. lépés (lépésszöveg-ütközés) `Grep`-pel, a **teljes** lépés-mappa ellen — ezt
@@ -236,7 +237,11 @@ konkrét parancsokat és kilépési kódokat a váz-konvenció skill „Futtatá
 sorrend mindig ugyanaz:
 
 1. **dry-run** a saját címkédre — ez fogja meg a definiálatlan és a kétszer definiált lépést;
-2. **éles futás** ugyanarra a címkére.
+2. **éles futás** ugyanarra a címkére;
+3. **a gyökér lintje** a repó gyökeréből (worktree-ben a munkafa gyökeréből) — a lépés- és
+   fixture-fájlokat a gyökér lintje méri, és a CI `lint` jobja blokkoló; a parancsot a
+   váz-konvenció skill 3. szakasza („Szerkezet és fájlnév-konvenciók") adja. Lint nélküli
+   „zöld" futás nem kész.
 
 Ha a futtató azzal a kilépési kóddal áll le, ami azt jelenti, hogy **el sem indult** (nem fut
 a stack), **állj meg és jelentsd**: a stack indítása a hívó dolga, nem a tiéd.

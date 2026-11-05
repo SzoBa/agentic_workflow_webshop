@@ -30,9 +30,57 @@ ugyanaz a fejlesztői döntés áll elő, csak később.
 
 ## 4/b. Delegálás
 
-`Agent` eszköz, `subagent_type: java-unit-test-writer`, **osztályonként egy hívás**. A
-független osztályok mehetnek párhuzamosan (`run_in_background: true`) — külön fájlba írnak,
-tehát nem ütköznek. Worktree **nem** kell: a két ág ekkor már egyesült.
+`Agent` eszköz, `subagent_type: java-unit-test-writer`, **osztályonként egy hívás, sorban,
+a fő fán**. A delegálások **ne** fussanak párhuzamosan ugyanabban a munkafában: külön
+tesztfájlba írnak ugyan, de mind ugyanabban a `server-java/`-ban futtat `mvn clean test`-et,
+és a `clean` a másik futás `target/classes`-át és `jacoco.exec`-jét törli — a build vagy a
+mért szám lesz hamis.
+
+**Párhuzamosan csak osztályonként külön worktree-ben.** Ha a sorban futás túl lassú, és
+több jelölt van.
+
+**Előfeltétel — a produkciós kód commitolt.** Párhuzamos kör **csak** akkor indulhat, ha a
+`git status --porcelain -- server-java/src/main` a `Running.md`-be írt **kiinduló** listához
+képest **nem mutat új sort**. A munkafák `HEAD`-ből ágaznak, a `HEAD` pedig a commitolt
+állapot: a 2. fázis javító köreinek commitolatlan változásait (7. lépés — azok a záró commitig
+a fő fán maradnak) egyik munkafa sem látná, és a tesztek a javítás **előtti** kódot mérnék. Ha
+van új sor, a **teljes** kör sorban fut, a fő fán — osztályonkénti kivételezés nélkül.
+
+1. Osztályonként egy munkafa, a fő fa **mostani** `HEAD`-jéből, egy közös időbélyeggel:
+   `git worktree add .claude/worktrees/{feature}-unit-<Osztály> -b wt/{feature}-unit-<Osztály>-<ÉÉÉÉHHNN-ÓÓPP> HEAD`
+   — előtte `git worktree list`, ugyanazzal a „már létezik → állj meg és kérdezz" szabállyal,
+   mint a `feature-implement` 3/a. lépésében.
+2. A prompt első bekezdése a munkagyökér — a `feature-implement` 3/a. lépésének bekezdése, a
+   **relatív** parancsalakkal együtt: minden parancs a repó gyökeréből,
+   `cd .claude/worktrees/{feature}-unit-<Osztály> && <parancs>` alakban (a Maven-futás:
+   `cd .claude/worktrees/{feature}-unit-<Osztály>/server-java && mvn clean test`) — a
+   subagent cwd-je a fő session **aktuális** könyvtára, és hívásonként oda áll vissza, ezért a
+   delegálás előtt `pwd`, és ha kell, `cd` a repó gyökerébe (`feature-implement` 3/a.,
+   „Előfeltétel”). A `<parancs>` a
+   `.claude/settings.json` `permissions.allow` mintáihoz igazodik (`mvn test …` /
+   `mvn clean test …`, `node .claude/skills/…`); ez az alak **engedélykérés nélkül** fut.
+   Abszolút `cd "D:/…"` előtag nem. Friss munkafában a `node_modules` és a `target/`
+   hiányzik; a Maven-futáshoz ez nem akadály.
+3. **Közös `support/` fixture-t ne emeljen ki** egyik agent sem — két párhuzamos ág ugyanazt
+   a fájlt írná, és az összefésülés ütközne. Ezt a promptban mondd ki; a közös fixture
+   kiemelése az összefésülés **után** a te javaslatod a jelentésben (vagy egy újabb, sorban
+   futó delegálás), nem az agenteké.
+4. **Átvétel.** Ha egy ág kész: `git -C <munkafa> add -A` és `git -C <munkafa> commit`, majd a
+   fő fán `git checkout <ág> -- <az ág tesztfájljai>` — így a tesztek a fő fán commitolatlanul
+   landolnak, és a 7/a. záró commitba kerülnek, nem külön merge-be. A fájllistát a
+   `git -C <munkafa> show --name-only --format= HEAD` adja; ha a `server-java/src/test/` alatti fájlokon és a
+   saját `docs/test-plans/<Osztály>.md` tervén kívül más is van benne, **állj meg** — az ág
+   kilépett a sávjából. A terv verziókövetett, tehát ugyanez a commit és ugyanez a
+   `git checkout` hozza át, kézi mentés nem kell.
+5. **Ellenőrizd, hogy a terv átjött**: a fő fán ott van a `docs/test-plans/<Osztály>.md`. Ha az
+   agent mégis a `.scratch/`-be írt valamit, azt a munkafa eltávolítása **előtt** mentsd át —
+   a `.scratch/` gitignore-olt, és a `git worktree remove` végleg törli.
+6. Utána `git worktree remove` (és szükség esetén `prune`, a `feature-implement` 4/5. pontja
+   szerint). A branch-et ne töröld.
+7. **A jelentett szám az összefésült fán futtatott egyetlen `mvn clean test`-ből jön**
+   (`server-java/`-ban, a fő fán), a `target/site/jacoco/jacoco.csv` osztálysoraiból — nem az
+   agentek saját munkafás méréséből. Azok egy-egy osztályt mértek elszigetelten; a kapu az
+   összefésült állapotra szól.
 
 A `model` a 2. fázis triázsát követi (`inherit` egyszerű spec, `opus` összetett).
 
@@ -58,8 +106,9 @@ A kör akkor kész, ha:
 2. minden delegált osztályra van **mért** áglefedettség, és az ≥ 90%,
 3. ami nem éri el, ahhoz **megindokolt** magyarázat van, nem kitöltő teszt.
 
-A számokat az agentek jelentéséből vedd át, és írd a napló 8. blokkjába — **szó szerint**,
-nem összefoglalva.
+A számokat sorban futott körnél az agentek jelentéséből, párhuzamosnál az összefésült fa
+`mvn clean test`-jéből (4/b. 7. pont) vedd át, és írd a napló 8. blokkjába — **szó
+szerint**, nem összefoglalva.
 
 ## 5. A lefedettségi kapu bővítése
 
@@ -95,8 +144,11 @@ mérés elrontása:
 1. Delegálj a `spec-implementer`-nek — **csak a konkrét hibával**: a megsértett
    kész-kritérium, a bukó unit teszt tényleges kimenete, és a `fájl:sor` bizonyíték. Ne
    indítsd újra az implementációt. A `model` egy fokozattal feljebb megy.
-2. Utána **futtasd újra** az érintett osztály unit tesztjeit (4/c. kapu).
-3. Utána delegálj **újra** a `spec-validator`-nak — friss futás, a **teljes**
+2. Utána **futtasd újra a szűretlen** `mvn clean test`-et (4/c. kapu) — nem `-Dtest`-tel:
+   a generált tesztek `@Nested` tagolásúak, és a szűrt futás `Tests run: 0`-val zölden lép ki.
+3. A futó backend a javítás **előtti** kódot szolgálja ki: indítsd újra (vagy kérd) a
+   `feature-implement` 5/2. pontjának szabálya szerint, mielőtt a validátor élő stack ellen mér.
+4. Utána delegálj **újra** a `spec-validator`-nak — friss futás, a **teljes**
    kritériumlistára, nem csak a javított pontra. Egy javítás máshol is elronthat valamit,
    és ezt csak a teljes lista mutatja meg.
 
@@ -104,5 +156,5 @@ mérés elrontása:
 validátor ítélete indította a kört, itt a unit teszt — más jelzés, más hibaosztály. Utána állj
 meg és jelentsd, mi maradt.
 
-Végül commitold a unit teszteket és a `pom.xml` bővítését beszédes magyar üzenettel. **Push
-nincs.**
+Itt **nincs** külön commit: a unit tesztek és a `pom.xml` bővítése a `SKILL.md` 7/a. fázisának
+egyetlen záró commitjába kerül, a többi változással együtt.

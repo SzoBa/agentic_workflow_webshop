@@ -25,7 +25,7 @@ agent-fájlba.**
 
 | Fájl | Miért |
 |---|---|
-| `e2e/README.md` | **teljes egészében.** Ez a váz szerződése: a négy megkötés (szerver-állapot, rate limit, előfeltételek, kiválasztás) innen való, és a jelentés is ezekre hivatkozik |
+| `e2e/README.md` | **teljes egészében.** Ez a váz szerződése: az öt megkötés (szerver-állapot, rate limit, előfeltételek, kiválasztás, retry nélküli soros futás) innen való, és a jelentés is ezekre hivatkozik |
 | `e2e/steps/vilag.mjs` | **mit tud a `this`** — a World tényleges képességei |
 | `e2e/steps/onteszt_lepesek.mjs` | a **közös** lépések (navigáció, „egy regisztrált vásárló") — ezeket nem definiálod újra |
 | `e2e/steps/admin_rendelesek_lepesek.mjs` | a legközelebbi minta: hogyan néz ki egy terméki lépésfájl ebben a repóban |
@@ -44,10 +44,14 @@ ebből, sem az agent promptjából. A váz nő: minden feature hozhat új World-
 fixture-építőt, és egy elavult lista alapján **duplikátumot** vennél fel egy létező
 képesség mellé.
 
-Tájékoztatásul, **nem teljes** (2026-08-01): a World ad `page`, `api`, `nonce`, `baseUrl`
-mezőket, és `megnyit`, `bejelentkezveMint`, `ujTermek`, `ujVasarlo`, `ujRendeles`,
-`keszletModositas`, `adminToken`, `adminMunkamenet` metódusokat. A tényleges, aktuális
-lista a `vilag.mjs`-ben van; az építők a `support/fixtures.mjs`-ben.
+Tájékoztatásul, pillanatkép (2026-11-06, a `vilag.mjs` alapján): a World ad `config`,
+`baseUrl`, `nonce`, `api`, `context`, `page`, `konzol`, `hibasValaszok` mezőket;
+előfeltétel-metódusként `adminToken`, `adminMunkamenet`, `ujTermek`, `ujVasarlo`,
+`ujRendeles`, `keszletModositas`; böngésző-metódusként `megnyit`, `tarolobaIr` (egy
+`localStorage` kulcs beültetése a **következő** oldalbetöltés elé), `szkriptekNelkul` (a
+következő betöltés a kliens JS-kötege nélkül) és `bejelentkezveMint`. A `tarolobaIr`,
+a `szkriptekNelkul` és a `bejelentkezveMint` a `megnyit()` **előtt** hívandó. A tényleges,
+aktuális lista a `vilag.mjs`-ben van; az építők a `support/fixtures.mjs`-ben.
 
 Új előfeltétel-építő **kizárólag publikus API-hívásból**, egyedi (nonce-os) névvel, és a
 kapocs a `Vilag`-ban egy metódusként — ez az agent munkaterülete, szabad. Ha az előfeltétel
@@ -67,8 +71,23 @@ reports/report.html       a HTML riport (gitignore-olt)
 ```
 
 Az `e2e/` **önálló npm-projekt**, nem workspace-tag: a repó gyökerének `npm ci`-je nem
-telepíti. Az egyszeri előkészítés (`npm install && npx playwright install chromium`) a
+telepíti. Az egyszeri előkészítés (`npm ci && npx playwright install chromium` az `e2e/`-ben —
+`npm ci`, nem `npm install`, mert az utóbbi átírhatja az `e2e/package-lock.json`-t) a
 **hívó** dolga.
+
+**A lépésfájlokat a gyökér lintje is méri.** Az `eslint.config.mjs`-nek külön blokkja van az
+`e2e/**/*.mjs`-re (`no-unused-vars`, `_` előtaggal kivételezve; Node- és böngésző-globálisok),
+tehát egy új lépés- vagy fixture-fájl után a **repó gyökeréből** fusson az `npm run lint` — ez
+a CI blokkoló `lint` jobja is. Ehhez a gyökérben kell `node_modules` (friss worktree-ben
+ott is `npm ci`), és worktree-ben a **munkafa** gyökeréből kell futtatni
+(`cd .claude/worktrees/<név> && npm run lint`): a fő fa lintje a `.claude/worktrees/**`-t
+kihagyja.
+
+**A láncban a lint kapuja egy helyen van:** a `feature-implement` 4. lépése (merge) után az
+orchestrátor a **fő fa gyökeréből** lefuttatja az `npm run lint`-et, és ez az e2e lépésfájlokat
+is fedi. A munkafában futtatott lint ehhez képest önellenőrzés; ha előretolt módban a munkafa
+gyökerében nincs `node_modules`, a jelentésben mondd ki, hogy a lint a merge utáni kapura
+maradt — ne állítsd zöldnek, amit nem futtattál.
 
 ## 4. Nyelv
 
@@ -91,6 +110,11 @@ cd e2e
 npm run e2e -- --dry-run --tags "@címke"     # 1. definiálatlan / ütköző lépés kiszűrése
 npm run e2e -- --tags "@címke"               # 2. az igazi futás
 ```
+
+Munkafában ugyanez a repó gyökeréből, relatív alakban:
+`cd .claude/worktrees/<név>/e2e && npm run e2e -- --dry-run --tags "@címke"` — a Bash-hívás a
+repó gyökerében indul és hívásonként oda áll vissza, és ez az alak illeszkedik a projekt
+engedélylistájára (`npm run e2e:*`); abszolút `cd "D:/…"` előtag nem.
 
 | Kilépési kód | Jelentése |
 |---|---|
@@ -119,7 +143,7 @@ a `client/dist`-et — ez fut a CI-ban).
   kell. Az `expect` web-first állításai a `playwright/test` alútvonalon így is elérhetők,
   ez ugyanannak a csomagnak a része, nem újabb függőség.
 
-## 7. A négy megkötés — a `README.md` szakaszai
+## 7. Az öt megkötés — a `README.md` szakaszai
 
 Ezeket a váz szerződése rögzíti; itt csak a mutató van, a teljes indoklás a README-ben:
 
@@ -140,6 +164,9 @@ Ezeket a váz szerződése rögzíti; itt csak a mutató van, a teljes indoklás
    mintájára), és akkor is **meglévő** megjelenítési osztályra, kommenttel indokolva.
    Ha egy elem szerep vagy címke alapján elérhetetlen, az **akadálymentességi hiány a
    komponensben** — azt jelenteni kell, nem `data-testid`-t akasztani rá.
+5. **Nincs újrapróbálkozás, és a futás soros** (README „5.") — `retry: 0`, `parallel: 0`. Egy
+   retry-jal zöldülő szcenárió nem zöld, csak elrejtett; a párhuzamosítás a közös
+   szerverállapot és az IP-s rate limit miatt fixture-izolációt kívánna.
 
 ## 8. A mérési rétegek — mit NE mérj újra itt
 

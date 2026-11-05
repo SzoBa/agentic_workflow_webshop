@@ -6,7 +6,8 @@ description: |
   meglévőt a feature változásaival bővít, és gépi leltár-kapuval zár. Használd proaktívan,
   amikor egy implementált feature után a dokumentációt is naprakészre kell hozni — a
   `feature-full` láncban a unit-teszt körrel PÁRHUZAMOSAN —, vagy amikor a fejlesztő
-  API-leírót kér a projekthez. Kizárólag a gyökér README-t és a gyökér OpenAPI-leírót írja;
+  API-leírót kér a projekthez. Ebben a repóban a `dokumentacio-iro` skill közvetlen hívása
+  helyett ezt az agentet használd (guard alatt fut). Kizárólag a gyökér README-t és a gyökér OpenAPI-leírót írja;
   a leírt rendszer forrásához soha nem nyúl, és ha a dokumentáció eltér a kódtól, a KÓD az
   igazság. NE használd kódkommentek, docstringek vagy almappa-README-k írására (az a
   `docs-writer`), és ne a specifikáció szövegének írására (az a `feature-spec-writer`).

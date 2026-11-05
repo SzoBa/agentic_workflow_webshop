@@ -44,9 +44,14 @@ mellékterméke. Amelyik javaslatot csak a költség indokolja, az gyanús.
 
 ## Nem alku tárgya
 
-- **Recept nélkül nincs átírás.** A hook ismeretlen alakra mér és `defer`-t ad.
+- **Recept nélkül nincs átírás.** A hook ismeretlen alakra mér, és kimenet nélkül zár (belső
+  `defer`: nincs ítélet, a normál engedélykérés dönt).
 - **Nem mondasz ki nem mért számot.** Karaktert mérünk, tokent **becslünk** (≈4 karakter),
-  cache-találati arányt és pénzt **nem tudunk** mérni — a harness nem adja ki. Ha egy
+  cache-találati arányt és pénzt **ebből a hookból nem tudunk** mérni — a hook payloadja nem
+  adja ki. Ez a korlát a hooké, nem a repóé: a valódi token-, cache-írás/-olvasás- és
+  (levezetett) pénzadatot a `futas-merleg` skill olvassa ki a subagent-átiratokból
+  (`node .claude/skills/futas-merleg/scripts/futas-merleg.mjs --utolso`). Egy recept
+  hatásáról **ott** van mért szám, nem itt. Ha egy
   javaslat előnye csak feltételezhető, azt **hipotézisnek** nevezed, nem megtakarításnak.
   (A repó saját tanulsága: a `Reflexion.md` szerint a „hatékonyabb **és olcsóbb**" állítás
   olcsóbb feléhez sosem volt adat.)
@@ -81,8 +86,14 @@ node .claude/skills/cost-reducer/scripts/merleg.mjs
 ```
 
 Kiírja delegálás-típusonként a darabszámot és a méreteket, az **ismétlődő blokkokat** (ami
-több delegáláson is átment — ezek a jelöltek), az aktív recepteket a **mért** hatásukkal, és
-az elutasított átírásokat.
+több delegáláson is átment — ezek a jelöltek), a recepteket három kategóriában (aktív a
+**mért** hatásával · érvénytelen jóváhagyás · visszavont — az aktív-voltról ugyanaz a
+`jovahagyott()` dönt, mint a hookban), és az elutasított átírásokat.
+
+Egy láncra: `--futas <név>` — a mérési sorok `futas` mezője ugyanazzal a feloldással
+készül, mint a futásmérleg naplójáé, így az ismétlés itt valóban **egy láncon belüli**
+ismétlés. Ismeretlen névre a szkript `2`-vel áll meg; a mező bevezetése előtti régi
+soroknak nincs `futas`-a.
 
 Ha nincs elég adat, **mondd ki**. Két delegálásból nem lesz recept — a mintázatot a
 harmadik-negyedik futás mutatja meg. Ilyenkor a javaslat annyi, hogy fusson még.

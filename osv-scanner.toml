@@ -9,38 +9,60 @@
 # visszatér, tehát egy kivétel nem tud csendben állandósulni. Ha a dátum lejár
 # és a csere még mindig nem történt meg, az tudatos döntést kíván — nem a dátum
 # néma kitolását.
+#
+# ELŐZMÉNY (2026-11-05): az első három react-router kivétel 2026-11-01-én lejárt,
+# és a CI pirosra váltott — a mechanizmus úgy működött, ahogy terveztük. A
+# felülvizsgálat eredménye:
+#   · GHSA-jjmj-jmhj-qwj2 — közben MÉGIS megjelent a 6.x-es javítás
+#     (react-router-dom 6.30.6). A lockfile emelésével megszűnt, kivétel nem kell.
+#     (A régi bejegyzés még azt írta, hogy a 6.x vonal végleg javítatlan — az OSV
+#     adat azóta változott. Egy kivétel indoklása is elavulhat: ezért jár le.)
+#   · a másik kettő és két új dev-találat — alább, mért kitettséggel, új dátummal.
 
-# --- react-router 6.x -------------------------------------------------------
+# --- react-router 6.x → csak a 7.x javítja ---------------------------------
 #
-# MIND A HÁROM találatnak UGYANAZ a gyökér-oka és ugyanaz a javítása: a
-# react-router 7.x ág. A kliens a 6.x-en áll (`client/package.json`:
-# `react-router-dom: ^6.28.1`), és a 6.x vonalon NINCS javított kiadás — a
-# legutolsó 6.30.4 is sebezhető (a GHSA-jjmj-jmhj-qwj2 kifejezetten
-# `last_affected: 6.30.4`-et mond, tehát nem is várható 6.x-es javítás).
-#
-# A javítás tehát FŐVERZIÓ-VÁLTÁS (6 → 7): önálló migrációs feladat, nem egy
-# lockfile-emelés — az `npm audit fix` épp ezért nem is nyúl hozzá. Amíg a
-# migráció meg nem történt, a három találat ismert és vállalt.
-#
-# ÉRDEMES TUDNI: a harmadikat (GHSA-jjmj-jmhj-qwj2) az `npm audit` NEM jelzi,
-# csak az OSV — a két adatbázis nem fedi egymást. Ez önmagában is indokolja,
-# hogy a CI ne pusztán `npm audit`-ot futtasson.
+# Mindkettő javítása a react-router 7.18.0, a 6.x vonalon nincs javított kiadás
+# (OSV, 2026-11-05). A kliens a 6.x-en áll (`client/package.json`:
+# `react-router-dom: ^6.28.1`, ma 6.30.6). A javítás FŐVERZIÓ-VÁLTÁS (6 → 7):
+# önálló migrációs feladat, a `docs/backlog/feature-backlog.md`-ben vezetve.
 
+# A kitettség ALACSONY, de nem nulla. A felhasználó által befolyásolható
+# navigációs cél egy van: a `Login.tsx` a `location.state.from`-ra navigál, amit a
+# `SessionExpiredNotice` a mindenkori `location.pathname + location.search`-ből
+# tölt. Egy `/%5Cevil.com` alakú, az SPA-fallback által kiszolgált URL így
+# elméletben átirányítási célpont lehet. A többi `navigate`/`<Link>` cél
+# kódban rögzített útvonal vagy szerveroldali azonosító.
 [[IgnoredVulns]]
 id = "GHSA-wrjc-x8rr-h8h6"
-ignoreUntil = 2026-11-01
-reason = "react-router open redirect (<Link> / useNavigate, CVE-2025-68470 megkerülése). Csak a 7.17.1+ ág javítja, a kliens 6.x-en áll — főverzió-váltást igényel, lásd a fenti blokkot."
+ignoreUntil = 2027-02-01
+reason = "react-router open redirect backslash-sel (<Link> / useNavigate, CVE-2026-53669). Csak a 7.18.0 javítja; a kliens 6.x-en áll — főverzió-váltás, a backlogban vezetve. Kitettség: alacsony, egyetlen útvonal (Login → location.state.from, a SessionExpiredNotice tölti a pathname-ből)."
 
+# A kitettség itt NULLA: a hiba az SSR-hidratálás `deserializeErrors()` ágában
+# van, a kliens viszont CSR-only (nincs SSR, lásd CLAUDE.md, Architecture).
 [[IgnoredVulns]]
 id = "GHSA-337j-9hxr-rhxg"
-ignoreUntil = 2026-11-01
-reason = "react-router deserializeErrors() konstruktor-injekció. Ugyanaz a főverzió-váltás javítja. Ez az ág az SSR-hidratálást érinti, a kliens viszont CSR-only (nincs SSR, lásd CLAUDE.md) — a kitettség ezért itt elméleti, de a csomag akkor is cserére vár."
+ignoreUntil = 2027-02-01
+reason = "react-router deserializeErrors() konstruktor-injekció (CVE-2026-53666), csak SSR-hidratálásnál. A kliens CSR-only, a kód nem fut le. A 7.18.0 javítja, ugyanazzal a főverzió-váltással, mint a GHSA-wrjc-t."
 
-# Ez a HÁROM közül a legsúlyosabb (CVSS 6.9), és a 6.x vonalon végleg javítatlan
-# marad: a javítás a react-router 7.13.0-ban van. A kitettség attól függ, jut-e
-# felhasználó által vezérelt érték átirányítási célként a `<Link>`/`useNavigate`
-# hívásokba — ezt a migráció előtt érdemes külön átnézni, nem a dátumra várva.
+# --- dev-függőségek: minimatch / glob ----------------------------------------
+#
+# Csak fejlesztői eszközök húzzák be, a kiszolgált kliensbe és a szerverbe nem
+# kerülnek: a minimatch-et az eslint, az @eslint/config-array és a
+# @typescript-eslint/typescript-estree (gyökér), illetve a glob (e2e); a globot
+# az @cucumber/cucumber 12.x (e2e). A mintákat és az útvonalakat a SAJÁT
+# konfigurációnk adja, nem támadó — a kitettség nulla.
+#
+# Miért nem emelünk: az eslint legfrissebb kiadása (10.14.0, 2026-11-05) is
+# `minimatch ^10.2.6`-ot kér, javított szülőverzió tehát nincs; egy `overrides`
+# a minimatch 11-et az eslintre kényszerítené, amit az nem deklarál. Ha a
+# lejáratkor az eslint vagy a cucumber már javított verziót húz, a kivétel
+# helyett az emelés a teendő.
 [[IgnoredVulns]]
-id = "GHSA-jjmj-jmhj-qwj2"
-ignoreUntil = 2026-11-01
-reason = "react-router open redirect → XSS (CVE-2026-53668). A 6.x vonal VÉGLEG javítatlan (last_affected: 6.30.4); a javítás a 7.13.0-ban van, tehát ugyanaz a főverzió-váltás oldja meg, mint a másik kettőt."
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-01
+reason = "minimatch globparts-erősítéses DoS (CVE-2026-118764), csak dev-eszközökben (eslint, typescript-eslint, cucumber/glob). A mintákat a saját konfigunk adja, nem támadó; az eslint 10.14.0 is minimatch ^10.2.6-ot kér, javított szülőverzió nincs."
+
+[[IgnoredVulns]]
+id = "GHSA-3g3m-2fjr-6pw4"
+ignoreUntil = 2027-02-01
+reason = "glob AbortSignal-megkerülés (CVE-2026-118773), csak az e2e @cucumber/cucumber 12.x-ében. A cucumber CLI nem szakítja meg AbortSignal-lal a keresést, és a gyökérmappát a saját konfigunk adja; a javítás (glob 14.0.2) a cucumber főverzió-emelésével jönne."

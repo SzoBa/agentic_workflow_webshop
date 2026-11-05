@@ -1,9 +1,15 @@
 # A kapu négy szabálya
 
 A `futas-mero.mjs` a delegálás **előtt** dönt, a már egyeztetett napló alapján.
-Csak `deny`-t vagy `defer`-t ad — `allow`-t soha, hogy ne kerülje meg a
-delegálás engedélykérését, és ne ütközzön a `kontextus-mero.mjs`
-átírás-`allow`-jával, amely ugyanarra a matcherre van bekötve.
+Csak `deny`-t ad; vagy egy `systemMessage`-et `permissionDecision` NÉLKÜL (mérési hiány,
+elromlott mérő — látszik, de a hívásról nem dönt); vagy kimenet nélkül zár (belső
+`defer`: „nem ítélek", a `defer` szót sosem írja ki — lásd a `CLAUDE.md`-t) — `allow`-t
+soha, hogy ne kerülje meg a delegálás engedélykérését, és ne ütközzön a
+`kontextus-mero.mjs` átírás-`allow`-jával, amely ugyanarra a matcherre van bekötve.
+
+A naplót minden szabály **deduplikálva** olvassa (`egyediSorok`, kulcs: `tool_use_id` + a
+szakasz kezdete): két, egyszerre futó hook kettős sora se dupla költséget, se egy második,
+azonos „validátorkört" — és abból hamis konvergencia-tiltást — ne adjon.
 
 ## Amit egyik szabály sem tilt
 
@@ -12,9 +18,16 @@ Ez a két kivétel a szabályok fölött áll, és mindkettő szándékos:
 1. **Validátor-delegálást soha.** Ha a konvergencia megállt, az utolsó dolog,
    amit el akarunk veszíteni, a záró mérés. Egy tiltott validátor azt jelentené,
    hogy nem tudjuk, hol tartunk — miközben pont az a kérdés.
-2. **Amire nincs adat.** Első delegálás, hiányzó átirat, olvasási hiba, kettőnél
-   kevesebb validátorkör → `defer`. **A tiltáshoz bizonyíték kell.** Egy hibás
-   mérő ne bénítson le munkát; a rossz irányba tévedés itt drágább.
+2. **Amire nincs adat.** Első delegálás (a futásnak még nincs egyeztetett sora) → nincs
+   ítélet (kimenet nélküli exit 0). Hiányzó átirat, olvasási hiba, vagy egy átirat,
+   amelyből **egyetlen sor sem** értelmezhető (súlyos mérési hiba) → szintén nincs ítélet,
+   de egy `systemMessage` kimondja, hogy a mérő nem indult el. **A tiltáshoz
+   bizonyíték kell.** Egy hibás mérő ne bénítson le munkát; a rossz irányba tévedés itt
+   drágább. A „kettőnél kevesebb validátorkör → nincs ítélet" kivétel **csak a
+   konvergencia- és az oszcilláció-szabályra** vonatkozik (azoknak két kör kell az
+   összevetéshez); a **keret** ettől függetlenül tilt, validátorkör nélkül is — épp a
+   2. körig sosem érő futást kell megfognia (`futas-kozos.mjs`, `itelet()`: a keret-ág
+   a `korok.length < 2` vizsgálat ELŐTT áll).
 
 A konvergencia- és oszcilláció-szabály ráadásul **csak javító** delegálást tilt
 (`javito_agentek`: `spec-implementer`, `e2e-test-writer`). A kutató vagy a
@@ -43,17 +56,34 @@ Az `n1 > 0` feltétel nem részletkérdés: nélküle egy `0 → 0` görbe — v
 egymást követő tiszta kör, a legjobb lehetséges kimenet — leállásnak
 minősülne.
 
+Ugyanez az `n1 > 0` feltétel azt is jelenti, hogy a **`0 → N`** görbét (egy tiszta
+kör után újra bukó kört) ez a szabály **nem** tiltja. Ez **döntés (2026-11-06)**, nem
+rés: a `0 → N` esetet az oszcilláció fogja (3. pont), mert a tiszta körben minden
+kritérium `[teljesül]` volt, így ami utána bukik, az visszaesés. Bizonyíték:
+`test/hooks/merok.test.mjs`, a „0 → N" esetek — a javítás előtt is zöldek voltak.
+
 Nem számít validátorkörnek:
 - a **megszakadt** delegálás (a markerei hiányosak, nem javuló mérleget
   jelentenek);
 - a **marker nélküli** jelentés (`konvergencia: null`). A nulla találat mérési
   hiány, nem „nulla hiba" — ugyanaz az elv, mint hogy a `[kétséges]` nem indít
-  javító kört.
+  javító kört;
+- egy már látott sor **kettős példánya** (ugyanaz a `tool_use_id` és szakasz) — a
+  párhuzamos hookok versenyének terméke, nem új kör.
 
 ## 3. `oszcillacio` — körbe-körbe javítás
 
-**Tilt, ha:** egy kritérium-azonosító az előző körben `[teljesül]` volt, most
-`[nem teljesül]`.
+**Tilt, ha:** egy kritérium-azonosító **bármelyik** korábbi körben `[teljesül]`
+volt, most `[nem teljesül]` (az összes korábbi kör teljesült-uniójával hasonlít, nem
+csak az előzővel — az 1. körben teljesült, a 2.-ban `[kétséges]`, a 3.-ban bukó
+kritérium is visszaesés).
+
+**A `0 → N` eset is ide tartozik** (döntés, 2026-11-06): egy tiszta kör után a
+következő körben bukó kritérium oszcilláció-tiltást ad, a konvergencia-szabály
+szándékosan nem lép. **Ismert rés:** egy olyan kritérium bukása, amelyet **egyik**
+korábbi kör sem jelölt `[teljesül]`-nek (új azonosító, vagy azonosító nélküli sor),
+egyik szabályt sem váltja ki — az oszcilláció azonosító-alapú, és amit nem mértünk
+teljesültnek, arról nem állítja, hogy visszaesett.
 
 Ez a szabály azért kell külön, mert **a darabszám elrejti**. Mért példa:
 
@@ -95,9 +125,10 @@ kapcsolója, egy futásra, nem az orchestrátoré.
 
 ## A csendes csapdák
 
-- **Ismeretlen mód-string** → `defer` (a `switch (MODE)` `default` ága). Egy
-  elgépelt mód **némán kikapcsolja a kaput**: a futás zöld, a védelem nulla.
-  Ezt csak `node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind` fogja el.
+- **Ismeretlen mód-string** → a hook nem mér és nem ítél (a `switch (MODE)`
+  `default` ága), csak egy `systemMessage`-et ad ki, `permissionDecision` nélkül.
+  Egy elgépelt mód tehát **kikapcsolja a kaput** — ez látszik, de a futást nem
+  állítja meg. A futás ELŐTT csak `node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind` fogja el.
 - **A `status` hazudik.** Mérve (`admin-orders`, `a566bc37caf892fd5`): egy
   session-limitbe futott, feladatát be nem fejező validátor `status`-a is
   `completed`. A csonkaságot csak a jelentés szövege árulja el.

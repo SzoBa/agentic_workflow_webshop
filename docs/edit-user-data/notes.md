@@ -1,6 +1,6 @@
 # Követelmény-audit — `spec/edit-user-data/requirements.md`
 
-**Mérés dátuma:** 2026-08-02 · **Ág:** `feature/pipeline` · **Vizsgált fájl:**
+**Mérés dátuma:** 2026-08-02 · **Vizsgált fájl:**
 [`spec/edit-user-data/requirements.md`](../../spec/edit-user-data/requirements.md) (75 sor,
 14 kész-kritérium)
 
@@ -421,8 +421,9 @@ Három ténybeli állítás megáll — ezeket **nem** kell újratárgyalni:
 | *„A régi rendelésekben lévő név nem változik meg utólag, az snapshot (ADR-0001)."* | Igaz a rendelés `customer` blokkjára (`V1__init.sql:8-13`). *(De nem teljes — lásd 4.5.)* |
 
 A **problémafelvetés** is helytálló: a felhasználó ma tényleg nem tud semmit módosítani magán, és
-a jelszóváltás valóban sehol nem elérhető — ezt a `spec/todo.md` 6. tétele független felméréssel
-is megerősíti.
+a jelszóváltás valóban sehol nem elérhető — ezt az ugyanaznapi backlog-felmérés 6. tétele független
+felméréssel is megerősítette (a tétel azóta lezárult, lásd
+[`docs/backlog/feature-backlog.md`](../backlog/feature-backlog.md)).
 
 ---
 

@@ -16,14 +16,34 @@ különbség, hogy a fájlt is te hozod létre, mert új feature-nél még nincs
 
 ## A fájl váza
 
-A `{feature}` és a `{dátum}` helyére a tényleges érték kerül. A `feature-implement` a saját
+A `{feature}` és a `{dátum}` helyére a tényleges érték kerül, az `<ÉÉÉÉHHNN-ÓÓPP>` helyére a
+worktree-branchek időbélyege (a futásnév `{feature}-<ÉÉÉÉHHNN-ÓÓPP>` ugyanezt viseli). A `feature-implement` a saját
 blokkjait tölti (kutató, implementáló, e2e, integráció, e2e futás, validáló, javító körök);
 a `feature-full` a 3–6. fázis blokkjait teszi hozzá.
+
+Minden delegálás-blokk ugyanazt az öt mezőt kapja (a `feature-implement` 1/c. lépése
+szerint): *Modell* és *Átadott kontextus* a delegálás **előtt**; *Kellett-e újra-delegálni*,
+*A jelentés validálható volt-e* és *Mit kellett pontosítani a kimenetből* a jelentés **után**.
 
 ```markdown
 # Futási napló — {feature}
 
 Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
+
+## Kiinduló állapot
+
+| | |
+|---|---|
+| Branch | `feature/{feature}` — {megnyitva ebben a futásban / már létezett} |
+| Kiinduló commit (`git rev-parse HEAD`, a spec-commit után) | |
+| Worktree-branchek időbélyege (`ÉÉÉÉHHNN-ÓÓPP`) | |
+| Futás-azonosító (a futásmérleg `--futas` értéke) | `{feature}-<ÉÉÉÉHHNN-ÓÓPP>` — a jelzőből, `kezdet`: {ISO-8601}{, `session`: {azonosító} / `session` nélkül} {/ `FUTAS_AZONOSITO`={érték}, a jelző nem érvényes} {· elavult jelzőt írtam felül: …} |
+| Felbontás | {`Orchestrator.md`, ez a futás generálta — logika {A / C / D} / meglévő `Orchestrator.md` / alapértelmezett lánc — nincs `Orchestrator.md` / nincs `Orchestrator.md`, a `*Gazda:*` sorok szerint csomagonként, szekvenciálisan ({sorrend})} |
+| Stack | {a lánc indította / már futott — a fejlesztő indította újra a merge után} |
+
+Kiinduló `git status --porcelain` (szó szerint; üres fánál: „üres"):
+
+    {kimenet}
 
 ## 0. A spec megírása (feature-spec-writer)
 
@@ -42,6 +62,7 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Átadott kontextus | |
 | Kellett-e újra-delegálni | |
 | A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
 
 ## 2. Delegálás — spec-implementer{, csomagonként külön blokk}
 
@@ -51,6 +72,7 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Átadott kontextus | |
 | Kellett-e újra-delegálni | |
 | A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
 
 ## 3. Delegálás — e2e-test-writer
 
@@ -60,19 +82,23 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Átadott kontextus | |
 | Kellett-e újra-delegálni | |
 | A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
 
 ## 4. Integráció (worktree merge)
 
 | | |
 |---|---|
-| Ágak | |
+| Ágak — az implementálói munkafák + az e2e ág (`wt/…-<időbélyeg>`, a merge sorrendjében; D esetben csomagonként, fan-innél a részleges merge is) | |
+| A fő fa `git status --porcelain` a kiinduló listához képest (4/1.) | |
 | `git diff --stat` | |
 | Tiszta volt-e a merge | |
+| Build · teszt · lint (· `mvn clean test`) az egyesített fán (4/6.) — tényleges kimenet | |
 
 ## 5. E2E futás
 
 | | |
 |---|---|
+| Stack (a lánc indította / már futott, újraindítva a merge után) | |
 | Parancs | |
 | Tényleges kimenet | |
 | Kilépési kód | |
@@ -84,6 +110,8 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Modell | |
 | Átadott kontextus | |
 | Mérleg (teljesül / nem / kétséges) | |
+| A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
 
 ## 7. Mérleg-kapu
 
@@ -106,6 +134,7 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Subagent-idő | |
 | Konvergenciagörbe (`[nem teljesül]` körönként) | |
 | Rendellenesség (megszakadt / marker nélküli) | |
+| Egyeztetés (`--atirat` nélkül — az utolsó delegálás hiányozhat / `--atirat` a fejlesztő jóváhagyásával) | |
 | A kapu megállította-e a láncot, és melyik szabály | |
 
 A pénz **levezetett** adat: mindig az `arak.json` érvényességi dátumával együtt írd be.
@@ -123,6 +152,23 @@ A görbében a `?` **mérési hiány**, nem „nulla hiba" — így is kell leí
 | Mért áglefedettség osztályonként | |
 | Megjelölt gyanús viselkedés | |
 | `pom.xml` osztálylista bővítve | |
+| Sorban, a fő fán / párhuzamosan, osztályonkénti worktree-ben (a `git status --porcelain -- server-java/src/main` új sorai a kiindulóhoz képest — 4/b. előfeltétel) | |
+| Összefésült fa `mvn clean test` (párhuzamos körnél ebből a szám) | |
+
+Osztályonként egy delegálás-blokk:
+
+#### 8/a/{Osztály} — java-unit-test-writer
+
+| | |
+|---|---|
+| Modell | |
+| Átadott kontextus | |
+| Munkafa (fő fa / `.claude/worktrees/{feature}-unit-{Osztály}`) | |
+| Kellett-e újra-delegálni | |
+| A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
+| Mért áglefedettség (a forrással: agent / összefésült futás) | |
+| A `docs/test-plans/<Osztály>.md` átjött-e (párhuzamos körnél a 4/b. átvételével) | |
 
 ### 8/b. Dokumentációs kör (docs-api-writer)
 
@@ -149,6 +195,20 @@ jelenti, hogy a hurok megállt — ezt a „mi bukott" szöveges oszlop önmagá
 korábban `[teljesül]` azonosító újra megjelenik itt, az **oszcilláció**: a javítás elrontott
 valamit, ami már működött.
 
+Körönként minden delegálás (javító ág és az újravalidálás is) saját blokkot kap:
+
+### 9/{kör}/{agent} — {spec-implementer | e2e-test-writer | java-unit-test-writer | spec-validator}
+
+| | |
+|---|---|
+| Forrás (2. fázis 7. lépése / 6. fázis) | |
+| Modell (javító körben egy fokozattal feljebb) | |
+| Átadott kontextus | |
+| Kellett-e újra-delegálni | |
+| A jelentés validálható volt-e | |
+| Mit kellett pontosítani a kimenetből | |
+| Backend újraindítva a javítás után (ki indította) | |
+
 ## 10. Zárás
 
 | | |
@@ -156,8 +216,31 @@ valamit, ami már működött.
 | Végső validátor-mérleg | |
 | Teljes `mvn test` kimenete | |
 | Lint / típusellenőrzés | |
+| Stack leállítva (vagy: nem a lánc indította) | |
+| Futásjelző törölve (`.scratch/futas-merleg/aktiv-futas.json`) | |
+| Záró commit fájllistája (a hash a jelentésben) | |
 | Ami nyitva maradt | |
 ```
+
+## Ha a `Running.md` már létezik
+
+Egy újrafuttatás **nem írja felül** a korábbi naplót: az a korábbi futás mérése. A fájl végére
+egy elválasztó után új blokk kerül, és a fenti váz **teljes** egészében alá ismétlődik,
+minden fejléc egy szinttel lejjebb:
+
+```markdown
+---
+
+## Futás — {ÉÉÉÉ-HH-NN ÓÓ:PP}
+
+Lánc: `feature-full` · Spec: `spec/{feature}/` · Előző futás: fent
+
+### Kiinduló állapot
+…
+```
+
+A kiinduló commit és a kiinduló `git status` **ennek** a futásnak a mért értéke, nem az
+előzőé — a 4/1. ellenőrzés és a záró commit ehhez a blokkhoz diffel.
 
 ## Amit a naplóba tilos írni
 

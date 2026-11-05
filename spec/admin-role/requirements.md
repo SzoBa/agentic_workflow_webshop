@@ -1,8 +1,7 @@
 # Admin szerepkör
 
 > **Történeti spec — nem élő norma.** 2026-07-22-én készült, a **Node/Express + lowdb**
-> backendre; 2026-08-02-án került ide a `week3/Admin role/` alól. A feature megvalósult, de a
-> mai kód a Java/Spring backend ([ADR-0006](../../docs/adr/0006-atvaltas-a-java-backendre.md)),
+> backendre. A feature megvalósult, de a mai kód a Java/Spring backend ([ADR-0006](../../docs/adr/0006-atvaltas-a-java-backendre.md)),
 > ezért a dokumentumban szereplő `server/…` útvonalak és lowdb-részletek **elavultak** — a
 > szándékot és az indoklásokat olvasd belőle, a fájlneveket ne.
 > A backend viselkedésének élő normája a [`spec/backend/`](../backend/requirements.md), az admin

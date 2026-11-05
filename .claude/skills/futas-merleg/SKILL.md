@@ -33,11 +33,47 @@ falióra-idő, modell, és validátornál a `[teljesül]` / `[nem teljesül]` /
 - a **pénzt mint mérést** — az `arak.json`-ból levezetett érték, dátummal;
 - a **súlyokat** a költség-egységben — azok feltevések, nem mérések.
 
+## Mi egy „futás"
+
+A futás határa a **lánc**, nem a session (döntés, 2026-11-06). Az azonosító
+elsőbbsége: `FUTAS_AZONOSITO` env > friss jelzőfájl > session. A jelző
+`.scratch/futas-merleg/aktiv-futas.json`:
+
+```json
+{"futas": "{feature}-<ÉÉÉÉHHNN-ÓÓPP>", "kezdet": "…", "session": "<opcionális>"}
+```
+
+A láncot vezető skill írja és törli, a hook **csak olvassa**. Friss = a `kezdet`
+időzónás ISO-8601, nem jövőbeli és legfeljebb 6 órás; minden más jelzőt (hibás JSON,
+üres `futas`, lejárt vagy jövőbeli `kezdet`) a hook figyelmen kívül hagy, és a
+sessionre esik vissza. A `session` **opcionális**: ha megvan, és nem egyezik a
+delegáló session azonosítójával, a jelző arra a delegálásra nem számít (fail-open:
+session) — így egy ugyanabban a repóban párhuzamosan futó másik session delegálásai
+nem ragadnak a lánchoz. Mező nélkül a jelző minden sessionre érvényes.
+
+Mivel a hook mindig a **korábbi** delegálásokat egyezteti, delegáláskor — az
+egyeztetés **után** — feljegyzi a `tool_use_id` → futás kötést a
+`.scratch/futas-merleg/delegalasok.jsonl`-be, és egyeztetéskor ez nyer: a sor annak a
+futásnak a része, amelyikben **elindult** — a lánc utolsó delegálása is, amelyet már
+a jelző törlése után zár le a riport. Kötés nélkül (pl. `FUTAS_KERET=0` alatt futott
+delegálás) az egyeztetéskori feloldás adja az azonosítót.
+
+SendMessage-nél a kötés kulcsa a **session + a címzett**, és a kötéskori **körszámot**
+is hordozza (a címzett átiratának addigi köre). Egy folytatott háttéragent könyveletlen
+köreit az egyeztetés e kör-határok szerint **szakaszokra** bontja: minden kör annak a
+SendMessage-nek a futásához tartozik, amelyik utoljára megelőzte. Így egy későbbi
+SendMessage nem viszi át a korábbi folytatás köreit a saját futásába, és egy még futó
+agentnek küldött második üzenet utáni körök is külön sort kapnak. A folytatás-sor `ts`-e
+a szakasz utolsó körének ideje.
+
 ## Nem alku tárgya
 
 1. **Számot csak mérésből mondj.** A költség-egység mért. A pénz levezetett, és
-   mindig ott a forrása: `≈ 34,67 USD (arak.json, 2026-08-04)`. Ami egyik sem,
-   arról hallgass.
+   mindig ott a forrása: az ártábla `ervenyes` dátuma, ahogy a **futás saját soraiban**
+   rögzült (nem a mai `arak.json`-é) — például `≈ 12,40 USD (arak.json, 2026-10-25)`;
+   több dátumnál `vegyes: d1, d2`. Részleges összeg (áratlan modell) alsó korlát:
+   `≥ X USD (részleges, áratlan: …)`. A dátumot a riportból vedd, ne ebből a
+   példából. Ami egyik sem, arról hallgass.
 2. **A hiányzó marker nem nulla hiba.** Ha egy validátor jelentésében nincs
    marker (`marker-nelkul`), az mérési hiány. Soha ne jelentsd konvergenciának,
    és soha ne mondd rá, hogy „nem volt hiba".
@@ -50,7 +86,11 @@ falióra-idő, modell, és validátornál a `[teljesül]` / `[nem teljesül]` /
    elszaladt; a küszöb átírása a jelet öli meg, nem a problémát.
 5. **A küszöböt mért számból javasold**, ne kerekítsd találomra. Az
    `admin-orders` futás mért adata (5 delegálás, 6 933 376 egység, ≈34,67 USD,
-   62 perc) a mai kalibráció alapja.
+   62 perc) a mai kalibráció alapja. **Fenntartással:** ezt a számot még a soronkénti
+   összeadás idején mértük, amely egy másik futáson ≈2,5-szeresre fújta fel a költséget
+   (5,07 M a valós 2,02 M helyett). Hogy az `admin-orders` számát is érintette-e,
+   **ellenőrizetlen** — az átiratai már nincsenek meg. Új kalibrációhoz friss, a
+   `message.id`-alapú mérővel vett futás kell.
 
 ## Munkafolyamat
 
@@ -60,10 +100,30 @@ falióra-idő, modell, és validátornál a `[teljesül]` / `[nem teljesül]` /
 node .claude/skills/futas-merleg/scripts/futas-merleg.mjs
 ```
 
-Egy futásra: `--futas <név>`. Egy még nem egyeztetett sessionre:
-`--atirat <path/to/<session>.jsonl>` — a szkript előbb egyeztet, csak utána
-jelent, így a lánc **utolsó** delegálása is bekerül (azt a `PreToolUse` hook a
-természeténél fogva nem tudja lezárni).
+Alapból a riport a hook által **már egyeztetett** naplóból készül, és csak olvas.
+Egy futásra: `--futas <név>`. A legutóbbira: `--utolso` — a közös `utolsoFutas()`
+szerint a napló legkésőbbi `ts`-ű sorának futás-azonosítójára szűr, és az első sorban
+kiírja, melyik az (a lánc-skillek záró mérlege ezt hívja). A napló kettős sorait
+(két egyszerre futó hook versenye) a riport és a kapu is kiszűri.
+
+**`--atirat <path/to/<session>.jsonl>` — CSAK A FEJLESZTŐ KIFEJEZETT JÓVÁHAGYÁSÁVAL.**
+A session-átirat a munkaterületen **kívül** van (`C:\Users\…\.claude\projects\…`), és a
+fejlesztő globális szabálya szerint azt natív eszközzel olvasni csak előzetes, kifejezett
+engedéllyel szabad. Kérdezd meg, mielőtt hívod; engedély nélkül a riportot a már
+egyeztetett adatból készítsd, és mondd ki, hogy a lánc **utolsó** delegálása (amit a
+`PreToolUse` hook a természeténél fogva nem tud lezárni) a következő hook-hívásig
+hiányzik belőle. Jóváhagyással a szkript előbb egyeztet, csak utána jelent, így az is
+bekerül.
+
+**A `--atirat` ír:** az egyeztetett sorokat a verziózott
+`docs/orchestration/_kontextus/futasok.jsonl`-hez fűzi, és ez a git diffben
+megjelenik. Próbafuttatáshoz vagy idegen átirathoz ideiglenes
+`CLAUDE_PROJECT_DIR` alatt futtasd. A `--futas` és a `--utolso` csak olvas. Súgó:
+`--help`.
+
+Hibás hívásra (érték nélküli kapcsoló, nem létező futásnév vagy átirat,
+`--utolso` és `--futas` együtt) a szkript hibaüzenettel, `2`-es kóddal áll
+meg — egy elgépelt futásnév nem ad üres, rendben lévőnek látszó riportot.
 
 A riport öt blokkja: futásonkénti összeg és konvergenciagörbe · a legdrágább
 delegálások · rendellenességek (megszakadt / marker nélküli / mérhetetlen) · a
@@ -80,6 +140,7 @@ a lényeg, nem a költség — a költség csak az ára annak, hogy nem haladunk
 | `2 → 2` | **megállt** — a kapu tiltja a következő javító delegálást |
 | `1 → 3` | romlik — ugyanaz a szabály fogja el |
 | `3 → 1`, de egy régen teljesült pont bukott | **oszcilláció** — a puszta darabszám elrejti, a kapu nem |
+| `0 → 2` | **oszcilláció**, ha a bukó pont a tiszta körben `[teljesül]` volt; a konvergencia-szabály szándékosan nem lép (döntés, 2026-11-06). Addig sosem mért azonosító bukását egyik szabály sem fogja |
 | `0` egyetlen körrel | nincs mit mondani a konvergenciáról, csak egy tiszta kör van |
 | `?` | marker nélküli kör — mérési hiány |
 
@@ -120,6 +181,9 @@ Ha a fejlesztő küszöböt módosít, az `AskUserQuestion`-nel megerősített d
 | `docs/orchestration/_kontextus/futasok.jsonl` | a napló (verziózott, prompt-szöveg nélkül) |
 | `docs/orchestration/_kontextus/keretek.json` | küszöbök és súlyok |
 | `docs/orchestration/_kontextus/arak.json` | ártábla, kötelező `ervenyes` dátummal |
+| `.scratch/futas-merleg/aktiv-futas.json` | a lánc jelzője (gitignore-olt; a lánc írja és törli, a hook olvassa) |
+| `.scratch/futas-merleg/delegalasok.jsonl` | delegálás-kori futás-kötések (gitignore-olt; a hook írja) |
+| `.scratch/futas-merleg/meta-hiany.jsonl` | hiányzó `meta.json` első észlelése (gitignore-olt): csak egy legalább 60 s-mal későbbi egyeztetésnél is hiányzó meta lesz `hiba` sor, `elso_eszlelve` mezővel |
 
 A `cost-reducer` és ez a skill **külön** dolgot csinál, közös tárban lakva: az a
 delegálásba **bemenő prompt** karaktereit szűkíti, ez a futás **fogyasztását**

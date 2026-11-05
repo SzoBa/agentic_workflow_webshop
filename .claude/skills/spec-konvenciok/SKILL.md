@@ -2,21 +2,25 @@
 name: spec-konvenciok
 description: |
   A webshop kódbázisának kódtérképe és kötelező konvenciói a spec-alapú fejlesztési
-  lánchoz (spec-researcher, spec-implementer, spec-validator). A három agent a
-  frontmatter `skills:` mezőjével tölti be indításkor — ez a konvenciók egyetlen forrása.
+  lánchoz (spec-researcher, spec-implementer, spec-validator), a unit-teszt-íróhoz
+  (java-unit-test-writer), a dokumentáció-íróhoz (docs-api-writer) és a teszt-futtatóhoz
+  (test-runner). A hat agent a frontmatter `skills:` mezőjével tölti be indításkor — ez a
+  konvenciók egyetlen forrása.
 ---
 
 # Kódtérkép és konvenciók
 
-Ezt a leírást a `spec-researcher`, a `spec-implementer` és a `spec-validator` kapja meg
-indításkor. **Kiindulópont, nem bizonyíték:** minden állítást a tényleges fájlból kell
+Ezt a leírást a `spec-researcher`, a `spec-implementer`, a `spec-validator`, a
+`java-unit-test-writer`, a `docs-api-writer` és a `test-runner` kapja meg indításkor. **Kiindulópont, nem bizonyíték:** minden állítást a tényleges fájlból kell
 igazolni, mielőtt bárki épít rá. Ha eltérést találsz a leírás és a kód között, a **kód**
 az igazság — és az eltérést jelenteni kell.
 
-**A projekttények egyetlen otthona ez a fájl.** A három agent szándékosan nem tartalmaz
+**A projekttények egyetlen otthona ez a fájl.** Az agentek szándékosan nem tartalmaznak
 csomagnevet, annotációt, útvonalat, parancsot vagy portszámot: ők a szerepet, a módszert és
 a kimeneti szerződést hordozzák, a projekt tényeit pedig innen veszik, szakasznévre
-hivatkozva. Ha egy tény két helyen él, előbb-utóbb szétcsúszik — ez a szétcsúszás már
+hivatkozva. Tudatos kivétel a `java-unit-test-writer` és a `spec-implementer`: néhány
+projekttényt (tesztfa-útvonal, `IntegrationTest`, build-fájlnevek) inline is hordoznak — ha
+egy ilyen változik, **mindkét** helyen igazítani kell. Ha egy tény két helyen él, előbb-utóbb szétcsúszik — ez a szétcsúszás már
 megtörtént egyszer (a lint-parancs hiánya), ezért van így felosztva. **Új projekttény ide
 kerül, ne az agent-fájlba.**
 
@@ -48,10 +52,13 @@ A csomagok **funkció szerint** vannak vágva, nem réteg szerint: nincs `contro
 | `domain/` · `repo/` | JPA entitások és Spring Data repositoryk — a közös kivételek |
 | `ops/` | napló, e-mail, statikus kiszolgálás, életciklus |
 
-A hozzáférés-vezérlés **útvonalminta alapján**, egyetlen ponton van bekötve
-(`security/AuthInterceptor`), nem végpontonkénti annotációval. Egy új `/api/admin/**`
-végpont tehát automatikusan védett — de ezt a `spec-validator`-nak igazolnia kell
-(token nélkül 401, customer tokennel 403).
+A hozzáférés-vezérlés **útvonalminta alapján**, egyetlen ponton van bekötve: a
+`config/WebConfig` két mintalistája két interceptorhoz köt — `PROTECTED_PATTERNS` →
+`security/AuthInterceptor` (401), `ADMIN_PATTERNS` → `security/AdminInterceptor` (403) —, nem
+végpontonkénti annotációval. Egy új `/api/admin/**` végpont tehát automatikusan védett.
+Egy új, **nem admin**, de belépéshez kötött útvonal (pl. `/api/kuponok`) viszont **nem**: azt
+a `PROTECTED_PATTERNS`-be fel kell venni, különben token nélkül is kiszolgálódik. Mindkét
+esetet a `spec-validator`-nak mérnie kell (token nélkül 401, customer tokennel 403).
 
 ### Backend — séma
 
@@ -69,8 +76,12 @@ Két visszatérő döntés a sémában:
 ### Kliens
 
 `client/src/api.ts` (fetch-hívók **és** a tükrözött típusok) · `client/src/pages/*.tsx` ·
-`client/src/{App,auth,cart,ProductReviews,RequireAdmin,Stars}.tsx` ·
-`client/src/{AddToCart,ReservationStatus,Reorder,SessionExpiredNotice}.tsx`
+`client/src/{main,App,auth,cart,catalog,ui}.tsx` (belépő, útvonalak, kontextusok, közös
+UI-elemek) · `client/src/{RequireAuth,RequireAdmin}.tsx` (útvonal-őrök) ·
+`client/src/{AddToCart,CartDrawer,CatalogFilter,ProductReviews,ReservationStatus,Reorder,SessionExpiredNotice,Stars,ThemeToggle}.tsx`
+
+A lista pillanatkép — új komponens előtt `Glob client/src/*.tsx`, hogy ne írj meglévő őrt
+vagy UI-segédet újra.
 
 Az újrafelhasználható komponensek **laposan** a `client/src/` alatt élnek (nincs
 `components/`, `lib/`, `hooks/` mappa); csak a routolt képernyők vannak a `pages/`-ben.
@@ -92,10 +103,11 @@ Adatbázis-hozzáférés csak *állításhoz* használható, előfeltételhez ne
 
 - `CLAUDE.md` — a projekt működési szabályai
 - `CONTEXT.md` — fogalomtár; **a szóhasználat mérvadó forrása**
-- `docs/adr/0001…0008` — architekturális döntések (rendelési tétel snapshot, kétrétegű
+- `docs/adr/0001…0009` — architekturális döntések (rendelési tétel snapshot, kétrétegű
   backend-spec, invariánsok atomicitása, Java/Spring/Postgres migráció, készletfoglalás
   és lejárt rendelés, az átváltás, a kliens IP kiolvasása az `X-Forwarded-For` láncból,
-  a munkamenet-token lenyomatként tárolása). Ha egy kérdésre a spec nem válaszol, itt
+  a munkamenet-token lenyomatként tárolása, az admin rendeléslista SQL-oldali lapozása és
+  szűrése — listás feature előtt ezt olvasd). Ha egy kérdésre a spec nem válaszol, itt
   lehet a válasz.
 
 ---
@@ -142,12 +154,13 @@ nem tartanak saját másolatot belőle. A parancsokat futtatás előtt így is a
 |---|---|---|
 | gyökér | `npm test` | a kliens Vitest suite-ja egyszer |
 | gyökér | `npm run build` | a kliens fordítása (`tsc && vite build`) |
-| gyökér | `npm run lint` | ESLint a `client/` és a `spec/backend/conformance/` felett (`lint:fix` az autofix) |
+| gyökér | `npm run lint` | ESLint a `client/`, a `spec/backend/conformance/` és az `e2e/**/*.mjs` felett (`lint:fix` az autofix). Worktree-ben a **munkafa** gyökeréből futtasd (`cd .claude/worktrees/<név> && npm run lint`): a fő fa lintje a `.claude/worktrees/**`-t kihagyja. A láncban a mérvadó lint a merge utáni, fő fán futó (`feature-implement` 4. lépés) |
 | gyökér | `npx tsc --noEmit -p client/tsconfig.json` | típusellenőrzés — a lint típus-tudatos szabályai szándékosan ki vannak kapcsolva, a típushibát **ez** fogja meg |
 | gyökér | `npm run dev` | a kliens dev szervere (`5173`) |
-| `server-java/` | `mvn test` | a teljes JUnit suite — **Dockert igényel** |
+| `server-java/` | `mvn clean test` | a teljes JUnit suite — **Dockert igényel**. A `test` fázisra egy `jacoco:check` kapu is kötve van (90% ág a `pom.xml` `check-unit-tested-classes` listájának osztályain), tehát egy lefedettség-csökkenés is piros build |
+| `server-java/` | `mvn -o jacoco:check@check-unit-tested-classes` | csak a lefedettségi kapu, a meglévő `jacoco.exec`-ből, a suite újrafuttatása nélkül — **pontosan ebben az alakban**, további kapcsoló nélkül (az engedélylista ezt a teljes parancsot engedi). Az ítélete csak egy előző **szűretlen**, tiszta futás után mérvadó |
 | `server-java/` | `docker compose up -d` | fejlesztői Postgres (`down -v` = teljes reset) |
-| `server-java/` | `mvn spring-boot:run` | a backend (`3001`) |
+| `server-java/` | `mvn spring-boot:run -Dspring-boot.run.profiles=dev` | a backend (`3001`). A `dev` profil nélkül el sem indul: a `DATABASE_PASSWORD`-nek nincs alapértéke |
 | gyökér | `./start.sh` | adatbázis + backend + kliens egyben (Ctrl+C mindet leállítja) |
 | gyökér | `.\start.cmd` | ugyanaz Windows terminálból — a `start.sh`-t hívja Git Bashsel |
 
@@ -155,14 +168,48 @@ nem tartanak saját másolatot belőle. A parancsokat futtatás előtt így is a
 shellcheck + sorvég-őr). Egy „zöld build és zöld teszt" jelentés lintelés nélkül olyan kódot
 nyilváníthat késznek, amin a CI piros.
 
+**Friss worktree-ben `npm ci`, sosem `npm install`.** A lánc munkafái (`.claude/worktrees/…`)
+`node_modules` nélkül indulnak: build, teszt és lint előtt `npm ci` a munkafa gyökerében (az
+`e2e/`-ben külön). A `ci` a lockfile-hoz ragaszkodik; az `install` átírhatja a
+`package-lock.json`-t — az függőségváltozás, és a `spec-guard.mjs` tiltja is.
+
 **`mvn test -Dtest=…` csapda:** a `-Dtest` szűrő **nem futtatja a `@Nested` osztályokat** —
 a surefire kiválasztja a külső osztályt, `Tests run: 0`-t ír, és **zölden lép ki**. Kilenc
 unit-teszt osztály így van felépítve. Egy szűrt futás, ami `Tests run: 0`-t ír, **bukás,
-ami sikernek látszik** — teljes `mvn test` a mérce.
+ami sikernek látszik** — teljes `mvn test` a mérce. Egy szűrt futás ráadásul a `jacoco:check`
+kaput is pirosra futtathatja (a lista többi osztálya 0%-on áll): iteráláshoz
+`-Djacoco.skip=true`, a mért számhoz szűretlen `mvn clean test`.
 
-A szerződés HTTP-szintű ellenőrzése egy futó backend ellen:
-`node spec/backend/conformance/run.mjs --base-url http://localhost:3001 --clean-store`
-(a 70 esetből 54; a maradék 16 `⚙` az `mvn test`-ben van).
+**A futó API mérése — health és `curl`.** Mielőtt bármit a futó backend ellen mérsz, nézd
+meg, fut-e: `curl -s http://localhost:3001/api/health`. Ha nem válaszol, a futásidejű ítélet
+`[kétséges]` (vagy a hívónak jelentett akadály), nem bukás. A `curl` alakja **kötött**: az URL
+áll **közvetlenül** a `curl -s` után, minden kapcsoló utána — mert az engedélylista mintája
+`Bash(curl -s http://localhost:3001/*)` (`.claude/settings.json`), és egy `curl -X POST -s …` vagy
+`curl -H … http://…` alak nem illeszkedik rá (a háttérben futó agent engedélykérésen akad el):
+
+```bash
+curl -s http://localhost:3001/api/... -X POST -H "Content-Type: application/json" -d '{"…": "…"}'
+curl -s http://localhost:3001/api/... -o /dev/null -w "%{http_code}"     # csak a státuszkód
+```
+
+Tokent igénylő hívásnál a `-H "Authorization: Bearer <token>"` szintén az URL **után** jön.
+
+**A szerződés HTTP-szintű ellenőrzése** egy futó backend ellen (a 70 esetből 54; a maradék
+16 `⚙` az `mvn test`-ben van). A futtató kapcsolói (`spec/backend/conformance/run.mjs`
+fejléce): `--base-url <url>`, `--clean-store`, `--skip-rate-limit`, `--only K-01,K-20`.
+
+- **A láncban — használt adatbázison — így:**
+  `node spec/backend/conformance/run.mjs --base-url http://localhost:3001 --skip-rate-limit`,
+  `--clean-store` **nélkül**.
+- **A `--clean-store` nem töröl semmit**: azt állítja, hogy a backend **friss, üres**
+  adattárolóval indult, és ezzel bekapcsolja a darabszám-érzékeny eseteket (K-05, K-48, K-49,
+  K-77). Használt adatbázison ezek a korábbi futások adatain hamisan buknak; nélküle
+  kimaradnak (`⊘`). **Csak friss** adatbázison használd — `cd server-java && docker compose
+  down -v` és a backend újraindítása után.
+- **A `--skip-rate-limit`** kihagyja a K-50 / K-51 esetet. A K-51 **15 percre kizárja** a
+  futtató IP-címét a bejelentkezésből, és a korlát perzisztens (a szerver újraindítását is
+  túléli) — enélkül a lánc további lépései (újravalidálás, az e2e futás bejelentkezései) 429-be
+  futnak. A futtató ilyenkor `2`-vel lép ki („a seed admin bejelentkezése 429-et kapott").
 
 **Docker hiánya nem kódhiba:** ha a Testcontainers `Could not find a valid Docker
 environment` hibával áll le, azt jelenteni kell, nem a feature bukásaként értelmezni.
@@ -180,10 +227,11 @@ hamis a jelentés:
 
 - **A teljes útvonal** az osztály `@RequestMapping`-jéből **és** a metódus leképezéséből áll
   össze. A metóduson látott `/{id}` önmagában nem útvonal.
-- **Jogosultság:** az `/api/admin/**` védelme útvonalminta alapján, egyetlen ponton van
-  bekötve (`security/AuthInterceptor` + `AdminInterceptor`). Egy új admin végpont tehát
-  *elvileg* automatikusan védett — de ezt **mérni kell**: token nélkül 401, customer
-  tokennel 403.
+- **Jogosultság:** útvonalminta alapján, a `config/WebConfig` két listájában
+  (`PROTECTED_PATTERNS` → `AuthInterceptor`, `ADMIN_PATTERNS` → `AdminInterceptor`). Egy új
+  admin végpont *elvileg* automatikusan védett; egy új, nem admin védett útvonal csak akkor,
+  ha a `PROTECTED_PATTERNS`-ben szerepel. Mindkettőt **mérni kell**: token nélkül 401,
+  customer tokennel 403.
 - **Séma:** sémaváltozáshoz **új** Flyway-migráció kell. Ha a JPA entitás új mezőt kapott
   migráció nélkül, az indulás `ddl-auto: validate` mellett elszáll — ezt egy zöld unit teszt
   nem feltétlenül mutatja meg.
@@ -230,13 +278,13 @@ ma is érvényesek (`bootstrap/DbJsonImporter`).
 
 ### Nem minden `spec/*/` mappa élő norma
 
-2026-08-02-án három **történeti** spec került a `week3/` alól a `spec/` alá. A `spec/*/`
-listázása tehát ma öt mappát ad, és ebből három **nem** megbízás:
+A `spec/*/` listázása ma hat mappát ad, és ebből három **történeti** — **nem** megbízás:
 
 | Mappa | Állapot |
 |---|---|
 | `spec/backend/` | **élő norma** — a backend viselkedésének szerződése |
-| `spec/admin-orders/` | **élő** feature-spec, a lánc mai kimeneti mintája |
+| `spec/admin-orders/` | **élő** feature-spec, a lánc mai kimeneti mintája. A validátor 3 ismert HIBA-t ad rá (`AR-17`, `AR-20`, `AR-21`, lásd a változásnaplóját) |
+| `spec/edit-user-data/` | **élő**, megvalósult — de **szándékosan rontott** minőségű gyakorló spec (`modifs.md`); a validátor 28 HIBA-ja ebből jön, várt. A rontás előtti alak és az audit: `docs/edit-user-data/` |
 | `spec/admin-role/` | történeti (2026-07-22, Node/lowdb) — megvalósult |
 | `spec/review-and-rating/` | történeti (2026-07-23, Node/lowdb) — megvalósult |
 | `spec/termek-felhasznaloi-ertekeles/` | történeti (2026-07-25, Node/lowdb) — **a leírt végpont ma nem létezik** |

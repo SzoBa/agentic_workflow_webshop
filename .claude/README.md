@@ -63,14 +63,14 @@ Ez a fájl a térkép — mi mire való, és mi mihez kapcsolódik.
 
   KONVENCIÓ-SKILLEK (tények, nem eljárás — a `skills:` mező tölti be)
     spec-konvenciok       ──► spec-researcher, spec-implementer, spec-validator,
-                              java-unit-test-writer
+                              java-unit-test-writer, docs-api-writer, test-runner
     e2e-vaz-konvenciok    ──► e2e-test-writer
     test-writer-java-unit ──► java-unit-test-writer  (munkafolyamat-skill, agentbe töltve)
     dokumentacio-iro      ──► docs-api-writer        (munkafolyamat-skill, agentbe töltve)
 
   ŐRHOOK (gépi kikényszerítés, nem próza)
-    spec-guard.mjs   ──► impl-write / impl-bash / e2e-write / unit-test-write /
-                         docs-write / readonly-bash
+    spec-guard.mjs   ──► impl-write / impl-bash / e2e-write / e2e-bash /
+                         unit-test-write / unit-test-bash / docs-write / readonly-bash
                          (az agentek frontmatteréből, írást és parancsot korlátoz)
     futas-mero.mjs   ──► kapu   (a settings.json-ból, MINDEN delegálásra)
                          mér, és MEGÁLLÍTJA a láncot: keret / konvergencia / oszcilláció
@@ -120,7 +120,7 @@ tényeit a `skills:` mezőn át kapják.
 |---|---|---|---|---|---|
 | `spec-researcher` | Implementálás **előtt** felderíti a kódbázis konvencióit, fájl:sor hivatkozásokkal ad eligazítást. Kódot nem ír. | `Read, Grep, Glob` | `sonnet` | `spec-konvenciok` | — (nincs író eszköze) |
 | `spec-implementer` | A `tasks.md` munkaegységeit sorrendben kóddá váltja, a terv interfészét (útvonal, státuszkód, szó szerinti hibaüzenet) betartva. | `Read, Write, Edit, Grep, Glob, Bash` | `inherit` | `spec-konvenciok` | `impl-write`, `impl-bash` |
-| `e2e-test-writer` | A kész-kritériumokból Gherkin szcenáriót + lépésdefiníciót ír az `e2e/` vázra, és lefuttatja. **Csak** az `e2e/`-t írja. | `Read, Write, Edit, Grep, Glob, Bash` | `inherit` | `e2e-vaz-konvenciok` | `e2e-write`, `impl-bash` |
+| `e2e-test-writer` | A kész-kritériumokból Gherkin szcenáriót + lépésdefiníciót ír az `e2e/` vázra, és lefuttatja. **Csak** az `e2e/`-t írja. | `Read, Write, Edit, Grep, Glob, Bash` | `inherit` | `e2e-vaz-konvenciok` | `e2e-write`, `e2e-bash` |
 | `spec-validator` | Friss szemmel végigméri a kész-kritériumokat, feltételenként ítél **bizonyítékkal**. Nem javít, fájlt nem módosít. | `Read, Grep, Glob, Bash` | `opus`, `effort: high` | `spec-konvenciok` | `readonly-bash` |
 
 Két szándékos aszimmetria a láncban:
@@ -134,7 +134,7 @@ Két szándékos aszimmetria a láncban:
 
 | Agent | Szerep | Eszközök | Modell | Betöltött skill | `spec-guard` mód |
 |---|---|---|---|---|---|
-| `java-unit-test-writer` | **Egy** Java osztályhoz ír JUnit 5 + Mockito unit teszteket, metódusonként, és a lefedettséget **méri**, nem becsli (90%-os ágkapu). | `Read, Write, Edit, Grep, Glob, Bash` | `inherit`, `effort: high` | `test-writer-java-unit`, `spec-konvenciok` | `unit-test-write`, `impl-bash` |
+| `java-unit-test-writer` | **Egy** Java osztályhoz ír JUnit 5 + Mockito unit teszteket, metódusonként, és a lefedettséget **méri**, nem becsli (90%-os ágkapu). | `Read, Write, Edit, Grep, Glob, Bash` | `inherit`, `effort: high` | `test-writer-java-unit`, `spec-konvenciok` | `unit-test-write`, `unit-test-bash` |
 
 A `feature-full` 4. fázisa hívja, **osztályonként külön futásban** — a skill egész ökonómiája
 erre a felosztásra épül. Amit soha nem tesz: produkciós kódot módosít (varrat-hiányt
@@ -158,16 +158,28 @@ Két szabály hordozza az egész szerepet:
 - **A záró kaput nem szabad kézzel zöldíteni.** Ha piros marad, mert a kódban van a hiba, az a
   `feature-full` zárókörének bemenete — nem dokumentációs feladat.
 
-Miért nem a `docs-writer` csinálja ezt: az általános, egyszeri dokumentálásra való, hook és
-mérés nélkül. Ez a két fájl viszont **szerződés** — a leltár-kapu miatt mérhető, hogy fedi-e a
+Miért nem a `docs-writer` csinálja ezt: az általános, egyszeri dokumentálásra való, csak az
+alap `impl-write` őrrel és leltár-kapu nélkül. Ez a két fájl viszont **szerződés** — a leltár-kapu miatt mérhető, hogy fedi-e a
 kódot —, és ezt egy hatókör nélküli agent nem tudja vállalni.
 
 ### 3.4 Általános agentek
 
 Az alapkészlet, a spec-lánchoz nem kapcsolódnak: `debugger`, `docs-writer`, `refactorer`,
-`reviewer`, `test-runner`. Nincs `skills:` bekötésük és nincs hookjuk — egyszeri, önálló
+`reviewer`, `test-runner`. A `test-runner` kivételével nincs `skills:` bekötésük — egyszeri, önálló
 feladatokra valók (hibakeresés, dokumentálás, diff-review, tesztfuttatás). Ha egy feladat a
 `spec/{feature}` normára hivatkozik, nem ezek valók rá, hanem a lánc.
+
+Alapőrt viszont kapnak (2026-10-25, bővítve 2026-11-06): a `reviewer` a `readonly-bash` módot,
+mert a neve szerint csak olvas; a `debugger`, a `refactorer` és a `test-runner` az `impl-bash`
+módot (commit-, telepítés- és branch-törlés-tilalom) **és** az `impl-write` Edit-őrt; a
+`docs-writer` (Bash-eszköze nincs) az `impl-write`-ot. Így egyik író agent sem írhatja a
+`spec/`-et, egy már kiadott migrációt vagy a `.git/`-et — szimlinken vagy junctionön át sem. Mind a négy író `permissionMode: acceptEdits`-szel
+fut, magyarul jelent, a `test-runner` betölti a `spec-konvenciok`-ot, és a leírásuk
+kölcsönösen kizárja a lánc-agenteket (`test-runner` ↔ `java-unit-test-writer`/`e2e-test-writer`,
+`debugger` ↔ `spec-implementer`, `reviewer` ↔ `spec-validator`, `test-runner` ↔ `spec-validator`).
+Integrációs tesztet (`IntegrationTest`-váz) a `test-runner` ír. A `.claude/` (hookok, agentek,
+skillek, settings) és a költségkapu küszöbfájljai egyik agentnek sem írhatók — ezt a guard
+minden módban tiltja.
 
 ---
 
@@ -178,9 +190,9 @@ feladatokra valók (hibakeresés, dokumentálás, diff-review, tesztfuttatás). 
 | `feature-full` | munkafolyamat | A **teljes** lánc egy belépőből: spec → implementáció → kontextus-mérleg → unit tesztek → újravalidálás. A többi skillt **behívja**, nem másolja. | ötlet ► kód + e2e + unit tesztek + futási napló |
 | `feature-spec-writer` | munkafolyamat | Egy mondatból spec-mappát érlel: felderít, **egyesével kikérdez**, és megtámadja a kimondatlan premisszákat. Meglévő spec-mappához nem nyúl. | ötlet ► `spec/{feature}/` (`requirements.md`, `plan.md`, `tasks.md`) |
 | `feature-implement` | munkafolyamat | A spec-mappát kóddá váltja a fenti négyagentes lánccal, két külön worktree-ben, javító hurokkal. | `spec/{feature}/` ► kód + e2e + ítélet-jelentés |
-| `spec-konvenciok` | konvenció | A webshop kódtérképe és kötelező konvenciói. **A projekttények egyetlen otthona** a lánc számára. | — (a 3 spec-agent és a unit-teszt agent tölti be) |
+| `spec-konvenciok` | konvenció | A webshop kódtérképe és kötelező konvenciói. **A projekttények egyetlen otthona** a lánc számára. | — (a 3 spec-agent, a unit-teszt, a dokumentációs agent és a `test-runner` tölti be) |
 | `e2e-vaz-konvenciok` | konvenció | Az `e2e/` Gherkin + Cucumber + Playwright váz szerkezete, API-ja, futtatása. | — (az `e2e-test-writer` tölti be) |
-| `test-writer-java-unit` | munkafolyamat | JUnit 5 + Mockito unit tesztek egy Java osztályra, metódusonként, **mért** JaCoCo branch-lefedettséggel (90% kapu). Terméki kódot soha nem módosít. | egy `.java` osztály ► tesztosztály + terv (`.scratch/test-writer/`) |
+| `test-writer-java-unit` | munkafolyamat | JUnit 5 + Mockito unit tesztek egy Java osztályra, metódusonként, **mért** JaCoCo branch-lefedettséggel (90% kapu). Terméki kódot soha nem módosít. | egy `.java` osztály ► tesztosztály + terv (`docs/test-plans/`, verziókövetett) |
 | `dokumentacio-iro` | munkafolyamat | A gyökér README-t és OpenAPI-leírót hozza szinkronba a kóddal: leltár → leíró → README → **gépi kapu**. Hiányzó leírót az EGÉSZ projektre hoz létre, nem csak a feature-re. | feature (vagy semmi) ► `README.md` + `openapi.yaml` + leltár-jelentés |
 | `skill-iro` | munkafolyamat | Új skillt/agentet vesz fel **ebbe** a mappába: fedésvizsgálattal indít, eldönti az alakot, validálással zár. | igény ► `.claude/skills/…` vagy `.claude/agents/…` |
 | `cost-reducer` | munkafolyamat | A delegálásoknak átadott kontextust méri és — **csak jóváhagyott recept alapján** — szűkíti. | mérések ► javaslat ► jóváhagyott recept |
@@ -204,6 +216,11 @@ kerül. Amelyik a legtöbbet ér:
   rossz teszt ► újra-delegálás; varrat-hiány és a specnek **nem** ellentmondó gyanú ► csak
   jelentés. Összekeverni őket a mérés elrontása.
 - `feature-full/references/futasi-naplo-sablon.md` — a `Running.md` váza és a tilalmai.
+- `feature-implement/references/` — a lánc lépéseinek mechanikája (2026-11-06-án kiszervezve a
+  783 soros SKILL.md-ből): felbontás, git-kiindulás, modellválasztás, naplóvezetés,
+  worktree-k és delegálás, munkacsomagok, integráció, e2e futtatás, futásmérleg-kapu, jelentés.
+  A SKILL.md lépésszámai (0/c., 3/a., 4/6. …) változatlanok, és minden lépés elején egy
+  **kötelező olvasmány** mutat a fájljára; az összefoglaló a „soha” szabályokat ott is tartja.
 - `skill-iro/references/skill-vagy-agent.md` — az alakválasztás döntési fája.
 - `test-writer-java-unit/references/` — eset-levezetés, JaCoCo, Mockito-minták, parametrizált minták.
 
@@ -216,29 +233,49 @@ prompt szövege nem véd meg attól, hogy átirányítással bármit felülírjo
 
 ### `spec-guard.mjs` — a lánc őre
 
-`PreToolUse`, az **agentek frontmatterében** bekötve (nem a `settings.json`-ban). Hat mód:
+`PreToolUse`, az **agentek frontmatterében** bekötve (nem a `settings.json`-ban). Nyolc mód:
 
 | Mód | Ki használja | Mit tilt |
 |---|---|---|
-| `impl-write` | `spec-implementer` | írás a `spec/` alá és a Flyway-migrációkba |
-| `impl-bash` | `spec-implementer`, `e2e-test-writer`, `java-unit-test-writer` | git-mutáció (commit, push) és függőségtelepítés |
-| `e2e-write` | `e2e-test-writer` | minden írás az `e2e/` (és `.scratch/`) mappán kívülre |
-| `unit-test-write` | `java-unit-test-writer` | minden írás a `server-java/src/test/` (és `.scratch/`) fán kívülre — a tesztelt produkciós osztály **és** a `pom.xml` is |
+| `impl-write` | `spec-implementer`, `debugger`, `refactorer`, `test-runner`, `docs-writer` | írás a `spec/` alá és a **meglévő** Flyway-migrációkba (új `V<n>__` fájl létrehozható); a függőségleírók (`package.json`, lockfájlok, `pom.xml`) írására **`ask`** |
+| `impl-bash` | `spec-implementer`, `debugger`, `refactorer`, `test-runner` | git-mutáció (commit, push, pull, revert, apply, am, új branch, branch-törlés, worktree, ref-átírás, alias), függőségtelepítés, a leírót megkerülő letöltés (`npx -y`/`-p`, `npm exec`, `dlx`, `mvn dependency:get`, `versions:*`, `pip install`), `Start-Process` → `ask`; és a parancs **írási céljaira** (átirányítás, `tee`, `sed -i`, `cp`/`mv`, `rm`, PowerShell fájl-cmdletek) ugyanaz, mint az `impl-write`-nál |
+| `e2e-bash` | `e2e-test-writer` | az `impl-bash` minden tiltása, és a Bash-írási célokra az `e2e-write` engedélylistája (a `/tmp` is tilos — `.scratch/` a hely) |
+| `unit-test-bash` | `java-unit-test-writer` | az `impl-bash` minden tiltása, és a Bash-írási célokra a `unit-test-write` engedélylistája |
+| `e2e-write` | `e2e-test-writer` | minden írás az `e2e/` (és `.scratch/`) mappán kívülre; az `e2e/package.json` és a lockfájl írására **`ask`** |
+| `unit-test-write` | `java-unit-test-writer` | minden írás a `server-java/src/test/`, a `docs/test-plans/<Osztály>.md` (a mappa `README.md`-je nem) és a `.scratch/` kívülre — a tesztelt produkciós osztály **és** a `pom.xml` is |
 | `docs-write` | `docs-api-writer` | minden írás a **gyökér** `README.md`-n, a gyökér OpenAPI-leírón (és a `.scratch/`-en) kívülre — a leírt rendszer forrása és az almappák README-i is |
-| `readonly-bash` | `spec-validator`, `docs-api-writer` | **engedélylistás**: ami nincs a listán, az `ask` |
+| `readonly-bash` | `spec-validator`, `docs-api-writer`, `reviewer` | **engedélylistás**: ami nincs a listán, az `ask` (az ok megnevezi a bukott szegmenst); minden írási cél `deny`; a `node` csak repó-beli scripttel vagy `--test`-tel, az `npx tsc` csak `--noEmit`-tel, a `vitest` csak `run`-nal megy át. A listán: az olvasó/mérő `mvn` célok (`clean` is), `npm run <script>` (`*fix*` nélkül), `npx tsc/vitest/eslint` (író kapcsoló nélkül), a git olvasó alakjai (`-C <út>`-tal is), `curl` (`-o` nélkül), `docker ps/logs`, idézett `cd`/`Set-Location` |
 
-Két dolog, amit érdemes tudni róla:
+Amit érdemes tudni róla:
+
+- **Idézőjel-tudatos tokenizálóval** bont (sh, PowerShell, cmd nyelvjárás), és a szabályok az
+  argv-n futnak: a `2>&1`, a `grep "a|b"`, az idézett szóközös útvonal nem hamis jelzés; a
+  `$(…)`/backtick, `bash -c`, `cmd /c`, `powershell -Command`, `eval`/`iex`, `find -exec` törzse
+  külön vizsgált szegmens, a parancsfej normalizált (`git.exe`, `"C:/…/git.exe"`, `./mvnw`).
+- **Worktree-ben is helyesen relativizál:** a legközelebbi git-gyökérhez, de egy `.git` fájlos
+  mappát csak akkor fogad el munkafának, ha a `gitdir:` a projekt `.git/worktrees/` alá mutat. A
+  lánc worktree-i a `.claude/worktrees/` alatt vannak. A `/d/…` alakot `D:/…`-ra fordítja.
+- **Sosem ad `allow`-t** — amire hallgat, azt a `.claude/settings.json` szűk `permissions.allow`
+  listája vagy a normál engedélyezés dönti el. Az `ask`/`deny` az allow-szabály fölött áll.
+- **Regressziós tesztek:** `node --test "test/hooks/*.test.mjs"` (Node 24-en a mappa-argumentum
+  nem működik).
 
 - **Nem sandbox, és nem is akar az lenni.** A tiltólistás vizsgálat elvi okból hiányos — egy
   tiltólista véges felsorolás egy végtelen halmazról. Azt fogja el, ami a gyakorlatban
-  előfordul (véletlen commit vagy telepítés).
+  előfordul (véletlen commit vagy telepítés). Nem látja a folyamaton belüli írást (`node -e`,
+  npm-script, Maven-plugin), a `bash script.sh` tartalmát, és a változóból összerakott
+  parancsfejet (`$GIT push`).
 - **A `readonly-bash` szándékosan szigorúbb**, mert engedélylistával dolgozik. Az `impl-*`
-  módok illeszkedés nélkül `defer`-t adnak. A két írási gyökér-mód (`e2e-write`,
+  módok illeszkedés nélkül kimenet nélkül engednek tovább (belül „nincs ítélet”, kimenet nélküli
+  exit 0 — a kiadott `defer` 2.1.310 óta elhalasztaná a hívást, ezért egyik hook sem ad ki ilyet).
+- **Az `ask` auto módban nem állít meg.** Mérve 2026-10-25-én: háttér-subagentnél, auto
+  engedélymódban a `readonly-bash` 20 `ask`-ja mind jóváhagyás nélkül lefutott. Az `ask` tehát
+  interaktív módban véd; auto módban jelzés, nem kapu. Ez tudatos döntés (az `ask` marad). A két írási gyökér-mód (`e2e-write`,
   `unit-test-write`) szintén engedélylistás — ott a *gyökér* a véges felsorolás.
 
 ### `kontextus-mero.mjs` — a `cost-reducer` gépi fele
 
-`PreToolUse`, a `.claude/settings.json`-ban bekötve (`matcher: "Agent|Task"`). **Minden**
+`PreToolUse`, a `.claude/settings.json`-ban bekötve (`matcher: "Agent|Task|SendMessage"`). **Minden**
 delegálást megmér, és **kizárólag jóváhagyott receptet** alkalmaz — recept nélkül a prompt
 érintetlenül megy tovább. Kikapcsolás egy futásra: `COST_REDUCER=0`.
 
@@ -256,13 +293,13 @@ Az utolsónak ára van: az átírás megkerüli az adott delegálás engedélyk�
 ### `futas-mero.mjs` — a `futas-merleg` gépi fele
 
 `PreToolUse`, a `.claude/settings.json`-ban bekötve, **ugyanarra a
-`matcher: "Agent|Task"`-ra**, mint a `kontextus-mero.mjs`. Egy mód: `kapu`.
+`matcher: "Agent|Task|SendMessage"`-ra**, mint a `kontextus-mero.mjs`. Egy mód: `kapu`.
 Kikapcsolás egy futásra: `FUTAS_KERET=0`.
 
 Két dolgot csinál egy híváson belül: **egyeztet** (a delegálás előtt lezárja az összes korábbi,
 még nem rögzített delegálást — valódi token, költség, idő, konvergencia), majd **kaput tart**
-(keret · konvergencia-megállás · oszcilláció). `allow`-t **soha** nem ad, csak `deny`-t vagy
-`defer`-t, így nem kerüli meg egy delegálás engedélykérését, és nem ütközik a `kontextus-mero.mjs`
+(keret · konvergencia-megállás · oszcilláció). `allow`-t **soha** nem ad, csak `deny`-t, vagy
+kimenet nélkül zár (mérési hiánynál `systemMessage`-et ad, ítélet nélkül), így nem kerüli meg egy delegálás engedélykérését, és nem ütközik a `kontextus-mero.mjs`
 átírás-`allow`-jával. A közös fele a `futas-kozos.mjs`, amit a skill riport-szkriptje is hív —
 ezért nem támaszkodik egyetlen ellenőrizetlen hook-eseményre sem (se `PostToolUse`, se `Stop`).
 
@@ -277,11 +314,19 @@ Három **mért** tény (2026-08-04, Claude Code 2.1.221), mindegyik némán hib�
   alábecslés, és nem hibaüzenet, hanem egy hihető szám. A naplóban ezért `zaro_kontextus` a neve.
 - A `toolUseResult.status` **hazudik a megszakadásról**: egy session-limitbe futott, feladatát be
   nem fejező validátor `status`-a is `completed`. A csonkaságot csak a jelentés szövege árulja el.
+- *(2026-10-25, 2.1.310)* **Egy API-válasz több átiratsor**: az üzenet minden tartalomblokkja
+  külön sor, és mindegyik ugyanazt a `usage`-et hordozza. A kör egysége ezért a `message.id`.
+  Soronkénti összeadással egy futás 5,07 M egységnek látszott 2,02 M helyett.
+- *(2026-10-25, 2.1.310)* **A háttér-delegálás a fő átiratban láthatatlan**: a `toolUseResult`
+  `{ isAsync: true, status: "async_launched", agentId }`, `agentType` és jelentés nélkül. Az
+  `agentType` és a `finished` a `.meta.json`-ból jön, a jelentés a `SubagentHandback`
+  tool_use-ból, a SendMessage-dzsel folytatott rész pedig `folytatas` sorként kerül a naplóba.
 
-> **A közös néma csapda:** mindhárom hook `defer`-t ad **ismeretlen mód-stringre** (a `switch (MODE)`
-> `default` ága). Egy elgépelt mód egy agent frontmatterében vagy a `settings.json`-ban tehát
-> **némán kikapcsolja az őrt** — a futás zöld, a védelem nulla. Ezt semmi más nem fogja el, csak
-> `ellenoriz.mjs --mind` (4. ellenőrzés).
+> **A közös csapda:** ismeretlen mód-stringre a `spec-guard.mjs` ítélet nélkül, kimenet nélkül
+> enged tovább, a két mérőhook pedig csak egy `systemMessage`-et ad. Egy elgépelt mód egy agent
+> frontmatterében vagy a `settings.json`-ban tehát **kikapcsolja az őrt** — a futás zöld, a
+> védelem nulla. Ezt az `ellenoriz.mjs --mind` 4. ellenőrzése fogja el (a frontmatterben és a
+> `settings.json`-ban is).
 
 > **Két hook, egy matcher.** A `kontextus-mero.mjs` és a `futas-mero.mjs` ugyanarra a delegálásra
 > fut. Egy `deny` terminális, tehát a kapu felülírja a másik `allow`-ját — viszont a
@@ -316,13 +361,13 @@ nem tud „csak úgy" bekerülni.
 | Script | Skill | Mit csinál |
 |---|---|---|
 | `skill-iro/scripts/leltar.mjs` | `skill-iro` | Leltár a meglévő skillekről/agentekről. `--keres "…"` szóátfedést számol — a **fedésvizsgálat belépője**, nem az ítélete. |
-| `skill-iro/scripts/ellenoriz.mjs` | `skill-iro` | A `.claude/` készlet validátora, 6 ellenőrzés: frontmatter, holt/árva `references/` hivatkozás, nem létező `skills:` bekötés, **ismeretlen hook-mód**, ténykiszivárgás, méret. `--mind` vagy egy név. |
+| `skill-iro/scripts/ellenoriz.mjs` | `skill-iro` | A `.claude/` készlet validátora, 8 ellenőrzés: frontmatter, holt/árva `references/` hivatkozás, nem létező `skills:` bekötés, **ismeretlen hook-mód** (a `settings.json`-ban is), ténykiszivárgás, méret, `--mind`-dal minden hook **lefuttatása** (HIBA, ha `defer`-t ír a stdout-ra vagy összeomlik), és az **engedélyminták** összevetése az előírt parancsalakokkal (a záró ` *`/`:*` szóhatárt követel). `--mind` vagy egy név. |
 | `skill-iro/scripts/kozos.mjs` | `skill-iro` | Közös segédek (repógyökér, szűk YAML-frontmatter-parser). Nem futtatható önmagában. |
-| `feature-spec-writer/scripts/spec-ellenoriz.mjs` | `feature-spec-writer` | Egy `spec/{feature}/` mappa validátora, 8 ellenőrzés: azonosító nélküli/duplikált kritérium, hiányzó `*Bizonyíték:*`, **kritérium amire egy feladat sem hivatkozik**, hiányzó `*Kész, ha:*`, kipipált checkbox, megengedő megfogalmazás, holt link. |
+| `feature-spec-writer/scripts/spec-ellenoriz.mjs` | `feature-spec-writer` | Egy `spec/{feature}/` mappa validátora, 9 ellenőrzés: hiányzó fájl, azonosító nélküli/duplikált kritérium, hiányzó `*Bizonyíték:*`, **kritérium amire egy feladat sem hivatkozik**, hiányzó `*Kész, ha:*`, kipipált checkbox, megengedő megfogalmazás, holt link, ütköző (kis/nagybetűs) fájlnevek a tervben. |
 | `feature-full/scripts/unit-jeloltek.mjs` | `feature-full` | A megváltozott produkciós Java osztályokat rangsorolja unit-teszt jelöltként (`JELÖLT` / `MÁR FIGYELT` / `GYENGE` / `KIZÁRVA`), soronkénti indokkal. **Tanácsadó, nem kapu** — mindig 0-val lép ki. |
 | `dokumentacio-iro/scripts/dok-leltar.mjs` | `dokumentacio-iro` | Végpont-leltár három forrásból — a controllerek leképezés-annotációiból, a gyökér OpenAPI-leíróból és a README-ből —, és összeveti őket. **Kapu, nem tanácsadó:** eltérésnél 1-gyel lép ki. A hiányon kívül a *fölösleget* is jelzi (a dokumentumban van, a kódban nincs) — az a rosszabb: a hiányzó végpontot az olvasó megkeresi, a nem létezőt meghívja. |
 | `cost-reducer/scripts/merleg.mjs` | `cost-reducer` | A delegálás-mérések mérlege: típusonkénti méretek, ismétlődő blokkok, az aktív receptek **mért** hatása, az elutasított átírások. |
-| `futas-merleg/scripts/futas-merleg.mjs` | `futas-merleg` | A futás mérlege: **valódi** token, költség és idő delegálásonként, konvergenciagörbe, a legdrágább delegálások, a kapu állása. Előbb egyeztet, csak utána jelent. |
+| `futas-merleg/scripts/futas-merleg.mjs` | `futas-merleg` | A futás mérlege: **valódi** token, költség és idő delegálásonként, konvergenciagörbe, a legdrágább delegálások, a kapu állása. `--atirat` mellett előbb egyeztet, csak utána jelent — de a session-átirat a munkaterületen kívül van, ezért csak a fejlesztő jóváhagyásával. |
 
 Amit a `merleg.mjs` **nem** tud kiírni: tokenszám (csak ≈4 karakteres becslés), cache-találati
 arány, pénz. Aki ezekre hivatkozva állít **prompt-megtakarítást**, nem mért.
@@ -383,7 +428,7 @@ Ha ebben a mappában bármit átírsz, ez a négy hely csúszhat szét:
   és amit valóban el akarunk kapni — a nem haladó ismétlődést —, azt a konvergencia- és az
   oszcilláció-szabály pontosabban fogja meg. A hely megvan, ha egy későbbi döntés bekapcsolná.
 - **Tiltás mérési adat nélkül.** A `futas-mero.mjs` fail-open: hiányzó vagy olvashatatlan átirat,
-  első delegálás, kettőnél kevesebb validátorkör → `defer`. Validátort **sosem** tilt, mert a
+  első delegálás, kettőnél kevesebb validátorkör → nincs ítélet (kimenet nélküli exit 0). Validátort **sosem** tilt, mert a
   megállt konvergencia épp az az eset, amikor a záró mérés a legfontosabb. Egy elromlott műszer
   ne állítson meg munkát; a tiltáshoz bizonyíték kell.
 - **Terméki kód a skillek kezében.** A `skill-iro` csak a `.claude/` alá ír, a

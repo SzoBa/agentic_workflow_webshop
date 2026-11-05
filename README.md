@@ -1,7 +1,8 @@
-# Mini Webshop — AI-native developer kurzus base projekt
+# Mini Webshop — spec-vezérelt, ügynöki fejlesztési munkafolyamattal
 
-Egy szándékosan egyszerű, full-stack webshop MVP, amit a kurzus során
-tovább lehet fejleszteni. A hangsúly az átláthatóságon és a könnyű
+Egy szándékosan egyszerű, full-stack webshop MVP, és a hozzá tartozó ügynöki
+fejlesztési lánc (`.claude/`), amely egy egymondatos ötletből specifikációt,
+kódot, teszteket és dokumentációt készít. A hangsúly az átláthatóságon és a könnyű
 elindíthatóságon van.
 
 ## Stack
@@ -15,7 +16,8 @@ elindíthatóságon van.
 - **E-mail:** Gmail API (OAuth2) a rendelési értesítőhöz — opcionális, a
   hitelesítő adatok hiányában kecsesen kimarad
 - **Tesztek:** JUnit 5 + Testcontainers a backendhez (`mvn test`, valódi
-  Postgresszel és valódi HTTP-n), Vitest + Testing Library a klienshez (`npm test`)
+  Postgresszel és valódi HTTP-n), Vitest + Testing Library a klienshez (`npm test`),
+  Cucumber + Playwright a böngészős végponttól végpontig futó szcenáriókhoz (`e2e/`)
 
 > A backend korábban Node.js + Express + lowdb volt. Az újraírás lezárult, a
 > Node-implementáció törölve — a döntés és a mérési jegyzőkönyve:
@@ -81,7 +83,7 @@ A backend és a frontend külön build-láncon van, ezért külön is indíthat�
 # 1. Backend: adatbázis + szerver
 cd server-java
 docker compose up -d          # Postgres a 5432-es porton
-mvn spring-boot:run           # API a 3001-es porton
+mvn spring-boot:run -Dspring-boot.run.profiles=dev   # API a 3001-es porton
 
 # 2. Frontend (a repó gyökeréből, másik terminálban)
 npm install
@@ -95,11 +97,15 @@ A Vite dev szerver az `/api` kéréseket automatikusan a backendre proxyzza,
 így a böngészőben elég az 5173-as portot megnyitni.
 
 Élesben a backend a lefordított frontendet is kiszolgálja (SPA-visszaeséssel):
-`npm run build`, majd `cd server-java && mvn spring-boot:run`.
+`npm run build`, majd `cd server-java && mvn spring-boot:run` — élesben a `DATABASE_PASSWORD`
+(és a többi hitelesítő) környezeti változóból jön, a `dev` profil nélkül.
 
 ### Környezeti változók (opcionális)
 
-Mind opcionális — nélkülük is elindul minden. A teljes lista magyarázatokkal:
+Egy kivétellel mind opcionális: a `DATABASE_PASSWORD`-nek **nincs alapértéke**, nélküle a
+szerver el sem indul. Fejlesztéshez a `dev` profil (`-Dspring-boot.run.profiles=dev`, a
+`./start.sh` magától bekapcsolja) adja a `docker compose` jelszavát; minden más nélkülük is
+elindul. A teljes lista magyarázatokkal:
 [`server-java/.env.example`](server-java/.env.example); másold `server-java/.env`
 néven, vagy — élesben ez a helyes — add az értékeket környezeti változóként.
 
@@ -129,10 +135,10 @@ felhasználó létezzen. Ha egy sincs, létrejön a seed admin:
 | `adminisztrator` | `admin123` |
 
 > ⚠️ **Ez fejlesztői adat.** Éles környezetben az első bejelentkezés után
-> cserélendő — a jelenlegi kódban jelszómódosítás nincs, ezért ott saját admin
-> felhasználó felvétele (regisztráció + adatbázisban `role: "admin"`) a helyes út.
+> cserélendő — a jelszócsere az „Adataim" oldalon (`/profile`) érhető el
+> (`POST /api/auth/password`).
 
-Az admin a `/admin/products` és a `/admin/users` oldalakat éri el. A védelem
+Az admin a `/admin/products`, az `/admin/orders` és az `/admin/users` oldalakat éri el. A védelem
 szerveroldali (útvonalminta-alapú admin-őr az `/api/admin/**` felett); a
 menüpontok elrejtése csak kényelmi funkció.
 
@@ -160,7 +166,7 @@ Backend — a `server-java/` mappából:
 | Parancs | Mit csinál |
 |---------|------------|
 | `docker compose up -d` | fejlesztői Postgres · `down -v` teljes reset |
-| `mvn spring-boot:run` | a szerver indítása (3001) |
+| `mvn spring-boot:run -Dspring-boot.run.profiles=dev` | a szerver indítása (3001); a `dev` profil nélkül a `DATABASE_PASSWORD` kötelező |
 | `mvn test` | a teljes JUnit suite (Dockert igényel) |
 | `mvn -DskipTests package` | csomagolás → `target/webshop-server-1.0.0.jar` |
 
@@ -211,25 +217,33 @@ workspace-tag; a stacket **nem** ő indítja):
 │   └── support/            # konfiguráció, HTTP-kliens, fixture-építők
 └── client/                 # React + Vite frontend
     └── src/
-        ├── main.tsx        # belépési pont (Router + Auth/Cart provider)
-        ├── index.css       # a teljes stíluslap
+        ├── main.tsx        # belépési pont (Router + Ui/Auth/Cart provider)
+        ├── index.css       # a stíluslapok belépési pontja (csak @import-ok)
+        ├── styles/         # tokens, base, shell, components, pages — ebben a sorrendben
         ├── api.ts          # backend hívások + közös típusok és formázók
         ├── auth.tsx        # belépett felhasználó (Context + localStorage token)
         ├── cart.tsx        # kosár állapot (Context + localStorage)
+        ├── catalog.tsx     # a katalógus lekérése és szűrőállapota (Context)
+        ├── ui.tsx          # felületi állapot: téma, kosárfiók nyitottsága (Context)
         ├── App.tsx         # útvonalak + layout
         ├── RequireAdmin.tsx# kliensoldali admin-őr (kényelmi)
+        ├── RequireAuth.tsx # kliensoldali belépés-őr a /profile-hoz (kényelmi)
+        ├── CartDrawer.tsx  # jobbról becsúszó kosárfiók (a /cart oldalt kiegészíti)
+        ├── CatalogFilter.tsx # a katalógus szűrője az oldalsávban
+        ├── ThemeToggle.tsx # témaváltó gomb a fejlécben (világos / sötét / rendszer)
         ├── Stars.tsx       # csillagos értékelés megjelenítése
         ├── ProductReviews.tsx # vélemények listája + beküldő űrlap
         ├── AddToCart.tsx   # "Kosárba" gomb + készletüzenet (lista és részletes nézet)
         ├── ReservationStatus.tsx # foglalási visszaszámláló / lejárat-magyarázat
         ├── Reorder.tsx     # újrarendelés a mai árakon (tervező + gomb)
         ├── SessionExpiredNotice.tsx # lejárt munkamenet sávja + terelés a belépéshez
-        └── pages/          # ProductList, ProductDetail, Cart, Checkout,
-                            # Login, Register, Orders, AdminProducts, AdminUsers
+        └── pages/          # ProductList, ProductDetail, Cart, Checkout, Login, Register,
+                            # Orders, Profile, AdminProducts, AdminOrders, AdminUsers
 ```
 
-A tesztek nem a forrás mellett élnek: `client/test/`, `server-java/src/test/java/`
-és `e2e/`. A csomagok **funkció szerint** vannak vágva, nem réteg szerint — egy
+A tesztek nem a forrás mellett élnek: `client/test/`, `server-java/src/test/java/`,
+`e2e/`, `test/mocks/` (a Gmail viselkedési iker) és `test/hooks/` (a `.claude/` hookjainak
+regressziós tesztjei, `node --test "test/hooks/*.test.mjs"`). A csomagok **funkció szerint** vannak vágva, nem réteg szerint — egy
 végpont megértéséhez egy mappát kell megnyitni.
 
 ## API végpontok
@@ -254,7 +268,8 @@ végpont, a leíró azt, *hogyan hívom*.
 | POST | `/api/auth/password` | jelszócsere — a válasz **új** tokent hoz, a régi érvénytelen |
 | GET  | `/api/health`       | health-check |
 
-Admin végpontok — mind a `requireAuth` + `requireAdmin` őr mögött (401 / 403):
+Admin végpontok — mind az `AuthInterceptor` + `AdminInterceptor` őr mögött (token nélkül 401,
+nem admin tokennel 403):
 
 | Metódus | Útvonal | Leírás |
 |---------|---------|--------|
@@ -342,7 +357,7 @@ jelenleg **nincs kliensoldali felület**, csak API.
 - `spec/admin-orders/` — a rendelés-adminisztráció feature-spece; a spec-alapú lánc
   legfrissebb, teljes kimenete
 - `spec/admin-role/` · `spec/review-and-rating/` · `spec/termek-felhasznaloi-ertekeles/`
-  — **történeti** feature-specek, 2026-08-02-án a kurzus `week3/` mappájából kerültek ide. A törölt
+  — **történeti** feature-specek. A törölt
   Node/lowdb backendre készültek (ADR-0006), így a bennük szereplő `server/…` útvonalak
   elavultak; mindegyik `requirements.md` státuszfejléccel kezdődik, ami ezt kimondja.
   Olvasmánynak valók, megbízásnak nem
@@ -356,12 +371,15 @@ jelenleg **nincs kliensoldali felület**, csak API.
   épülnek, a kiválasztás szerep/címke szerint megy)
 - `server-java/README.md` — a backend indítása, konfigurációs kulcsok, adatátvétel
 - `docs/adr/` — architekturális döntések (ADR 0001–0009)
+- `docs/test-plans/` — a `java-unit-test-writer` verziókövetett teszttervei (osztályonként egy)
 - `.claude/` — az ügynöki fejlesztési munkafolyamat: 10 skill, 11 agent és 3 hook (plusz egy közös modul); a térkép
   a [`.claude/README.md`](.claude/README.md). A belépő a `feature-full` skill (ötlet → spec →
   implementáció + e2e → validálás → unit tesztek → dokumentáció), a bekötések épségét a
   `node .claude/skills/skill-iro/scripts/ellenoriz.mjs --mind` validátor ellenőrzi
-- `docs/ATVETEL.md` — mi került át az eredeti kurzusrepóból, az átvétel utáni ellenőrzés
-  mért eredményei és a bemutató forgatókönyve
+- `docs/backlog/` — a nyitott feature-ek listája (`feature-backlog.md`) és a rendelés-adminisztráció
+  spec-en túli észrevételei; nem norma
+- `presentation.md` — két bemutató-feladat, egyenként három párhuzamos agenttel, kb. 30 percre
+  (unit-teszt legyező három szolgáltatásra; a vevői út e2e-fedése három szcenárió-csomagban)
 - `docs/digital-twin/` — a Gmail viselkedési iker (`test/mocks/msw/`) élő specifikációja
 - `docs/scenario-catalog/` · `docs/user-simulation/` — forgatókönyv-katalógusok és a szimulált
   felhasználós riport (a vásárlási folyamatra és az `edit-user-data` feature-re)

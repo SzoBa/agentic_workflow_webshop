@@ -50,7 +50,9 @@ mappanév ékezet nélküliek.
   kérdezz rá.
 - **Csak a `spec/{feature}/` alá írsz**, és csak **új** mappába. Terméki kódhoz,
   `docs/`-hoz, `.claude/`-hoz nem nyúlsz, és **meglévő spec-mappát nem írsz felül** — lásd
-  „Ha a mappa már létezik".
+  „Ha a mappa már létezik". **Git-műveletet sem végzel**: a mappa commitolatlanul marad, a
+  commitja a következő lépésé (a `feature-implement` 0/c. lépése, illetve a `feature-full`
+  spec-commitja) — lásd a 6. fázist.
 - **Nem implementálsz, és nem is tervezel meg mindent.** A spec a viselkedés normája és az
   interfész szerződése; az algoritmus megválasztása az implementálóé, hacsak egy döntés
   nem **köti** a két oldalt egymáshoz.
@@ -64,8 +66,7 @@ mappanév ékezet nélküliek.
 - A feature nevét a fejlesztőtől kapod, vagy javaslatot teszel rá: **ékezet nélküli
   kebab-case**, a funkcióról elnevezve (`admin-orders`, `kupon-bevaltas`), nem a rétegről.
 - `Glob`-bal nézd meg a meglévő `spec/*/` mappákat — a névütközés és a **tartalmi** fedés
-  is itt derül ki. Közülük három **történeti** spec (a `week3/` alól kerültek ide
-  2026-08-02-án); melyik és miért, azt a `spec-konvenciok` 5. szakasza mondja meg. A
+  is itt derül ki. Közülük három **történeti** spec; melyik és miért, azt a `spec-konvenciok` 5. szakasza mondja meg. A
   névütközésnél ezek is számítanak, a tartalmi fedésnél viszont **nem** normák: ha az új
   feature egyikük témáját folytatja, az nem fedés, hanem előzmény — hivatkozd a specben,
   és a mai állapotot a kódból és a `spec/backend/`-ből vedd, ne belőlük.
@@ -119,8 +120,9 @@ Szabályok:
 `references/kihivas-katalogus.md` — a repóban **ténylegesen megtörtént** spec-írói hibák
 katalógusa, mindegyikhez a bizonyítékkal, és a kérdéssel, ami megfogta volna.
 
-Ez nem stílusgyakorlat. A `spec/admin-orders/requirements.md` változásnaplója négy javítást
-sorol fel, és a review **mindegyiket spec-írói hibaként** azonosította: nem az implementáló
+Ez nem stílusgyakorlat. A `spec/admin-orders/requirements.md` változásnaplója két körben öt
+javítást sorol fel (`AR-08`, `AR-19`, `AR-15`, `AR-20`, `AR-21`), és a review **mindegyiket
+spec-írói hibaként** azonosította: nem az implementáló
 tévedett, hanem a kritérium szövege volt kétértelmű, megengedő, vagy ellenőrizetlen
 premisszára épült.
 
@@ -138,7 +140,7 @@ A tehermegosztás — **ezt a hármat nem szabad összekeverni**:
 | Fájl | Mit rögzít | Mit **nem** |
 |---|---|---|
 | `requirements.md` | a **viselkedés normája** és a számozott kész-kritériumok | nem tervez: nem mondja meg, melyik osztályban |
-| `plan.md` | az **interfész szerződése** (útvonal, paraméterek, válasz-alak, típustükör, fájltulajdon) és a megkötő döntések | nem ismétli meg a követelményt |
+| `plan.md` | az **interfész szerződése** (útvonal, paraméterek, válasz-alak, típustükör, fájltulajdon), a megkötő döntések, és a munkacsomagok függőségei | nem ismétli meg a követelményt, és nem delegál: agent-név, delegálási sorrend, kontextus-átadás nincs benne |
 | `tasks.md` | a **végrehajtási sorrend**, munkaegységenként egy `*Kész, ha:*` visszahivatkozással | nem hoz új követelményt |
 
 Amit a specnek **mindig** ki kell mondania, mert a repóban ezen múlt már futás:
@@ -161,10 +163,11 @@ A checkboxokat **üresen** hagyod (`- [ ]`): a `spec/` a norma, nem munkanapló,
 node .claude/skills/feature-spec-writer/scripts/spec-ellenoriz.mjs <feature>
 ```
 
-Nyolc gépi ellenőrzés a most kiírt mappán: hiányzó fájl · azonosító nélküli vagy duplikált
+Kilenc gépi ellenőrzés a most kiírt mappán: hiányzó fájl · azonosító nélküli vagy duplikált
 kész-kritérium · hiányzó `*Bizonyíték:*` · olyan kritérium, amire egyetlen munkaegység sem
 hivatkozik (és fordítva) · hiányzó `*Kész, ha:*` · kipipált checkbox · megengedő
-megfogalmazás · holt belső hivatkozás.
+megfogalmazás · holt belső hivatkozás · ütköző fájlnevek a tervben (csak kis/nagybetűben eltérő,
+vagy ugyanarra a kiterjesztés nélküli importra feloldódó útvonalak).
 
 `HIBA` esetén nem nulla a kilépési kód — **addig nem jelentesz készet**. A `FIGYELEM`
 mérlegelést kér: vagy javítod, vagy a jelentésben leírod, miért nem.
@@ -177,6 +180,10 @@ mérlegelést kér: vagy javítod, vagy a jelentésben leírod, miért nem.
 - **mit támadott meg a 3. fázis, és mi lett belőle** — kérdésenként egy sor,
 - amit a fejlesztő **kifejezetten nem célnak** jelölt,
 - a validátor kimenete szó szerint,
+- hogy a mappa **commitolatlan** — és miért számít: a `feature-implement` a párhuzamos ág
+  worktree-it a `HEAD`-ből ágaztatja, így commit nélkül azokban nincs megbízás, és a 3/a.
+  lépés ellenőrzése megállítja a láncot. A commitot a `feature-implement` 0/c. lépése végzi
+  (feature-branchen, csak a `spec/{feature}/` tartalmával), vagy előtte a fejlesztő,
 - a következő lépés: `feature-implement` a most megírt mappára.
 
 Ha maradt eldöntetlen kérdés, **mondd ki** — egy „majd az implementáló eldönti" pont a
