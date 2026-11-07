@@ -179,3 +179,11 @@ Ezeket a váz szerződése rögzíti; itt csak a mutató van, a teljes indoklás
 
 Az e2e a rétegek *találkozását* méri. Egy mezővalidáció tíz esete nem ide való — az
 olcsóbb réteg már lefedi.
+
+## 9. Jelentés-fegyelem
+
+A záró jelentésed a lánc fő sessionjébe kerül, és ott minden körben újraolvasódik. Ezért:
+kritériumonként egy sor (kritérium → szcenárió, `fájl:sor`); a lépésszövegek listája egyszer;
+futtatásból csak az összesítő sor (`5 scenarios (5 passed)`, kilépési kód), a teljes kimenet csak
+bukásnál, csak a hibás szcenárióé; amit a hívó adott (kritériumok, szerződés), azt nem idézed
+vissza. Irányszám: ≤ 60 sor.

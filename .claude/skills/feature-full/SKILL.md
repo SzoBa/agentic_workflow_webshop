@@ -158,6 +158,11 @@ egymástól függetlenül bukhat és zöldülhet — a jelentésben **külön** 
 
 ## Indulás — mielőtt a 0. fázis elkezdődik
 
+0. **Friss session.** Ha ebben a beszélgetésben már folyt más munka (egy korábbi lánc, hosszú
+   fejlesztés), **mielőtt bármit csinálnál, javasold a fejlesztőnek** a lánc indítását egy új
+   sessionben (`/clear` vagy új ablak): a lánc minden körben a teljes fő kontextust olvassa újra,
+   és az állapota úgyis fájlokban él (mérve 2026-11-07: egy kis feature lánca 495k tokenes
+   kontextusra ült rá, friss sessionben 71k-ról indult volna). Ha a fejlesztő maradna, mehet.
 1. **Tiszta dokumentáció.** Ha a `git status --porcelain -- README.md openapi.yaml` nem üres,
    **állj meg** és jelentsd: ezt a két fájlt a 4. fázis `docs-api-writer`-e írja, és a záró
    commitba kerülnek — a fejlesztő commitolatlan módosítása velük együtt menne, és a

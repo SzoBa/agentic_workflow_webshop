@@ -212,7 +212,9 @@ A láncskillek **minden futásnál** elindítják, a futásjelző megírása ut�
 fázisait (Spec → Felderítés → Implementáció ∥ e2e-írás → Integráció → E2E futás → Validálás
 → Javító kör → Unit ∥ dokumentáció → Zárás, állapotonként kész / fut / vár / kihagyva),
 agentenként egy idősávot az eszközhívásokkal és a guard-tiltásokkal, a tokeneket és a becsült
-költséget, a párhuzamossági szorzót, a worktree-k változásait és a stack lámpáit.
+költséget, a párhuzamossági szorzót, a worktree-k változásait, a stack lámpáit, és a **fő
+session kontextusméretét** (az utolsó kör mért `input + cache` tokenje; 300k fölött narancs, 500k
+fölött piros — ott a friss session már olcsóbb, lásd `feature-full` „Indulás" 0.).
 
 - **Levezet, nem bemondásra dolgozik.** A fázist az agentek típusából (a `meta.json`
   `agentType`-ja) és a fő session parancsaiból (`git merge`, `npm run e2e`, a jelzőt törlő `rm`,

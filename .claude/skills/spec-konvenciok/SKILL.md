@@ -341,3 +341,21 @@ Ezek **szándékos** tulajdonságok, nem hibák — ne "javítsd" őket, ha a sp
 - A localStorage-kosár teljes `Product` pillanatképet tárol (árral, készlettel), ami a
   szerverhez képest elavulhat a következő frissítésig.
 - A `spec/backend/` jelöléseiről (`MA IS` / `ÚJ` / `FORRÁS`) lásd az 5. szakaszt.
+
+---
+
+## 8. Jelentés-fegyelem — a jelentésed a fő session kontextusába kerül
+
+A záró jelentés szó szerint a lánc fő sessionjébe érkezik, és onnan a lánc végéig **minden
+körben** újraolvasódik (mérve 2026-11-07: egy kis feature láncában a négy jelentés ≈ 30k token
+volt, és a fő session többe került, mint a négy agent együtt). A sablonod szerkezetét tartsd
+meg, de:
+
+- **Ítélet és mutató, nem elbeszélés:** pontonként egy-két sor — állítás + `fájl:sor` vagy
+  tesztnév. Hogy hogyan jutottál oda, az nem kell.
+- **Parancskimenetből csak az összesítő sor** (`Tests 328 passed (328)`, `BUILD SUCCESS`, a
+  kilépési kód); a teljes kimenet csak piros esetén, és csak a hibás része.
+- **Amit a hívó adott, azt nem idézed vissza** (spec, szerződés, kapott jelentés) — hivatkozol rá.
+- A fájllista **egyszer** szerepel; spec-en túli észrevétel legfeljebb öt, soronként egy.
+- Irányszám: kutató és implementáló ≤ 80 sor, validátor kritériumonként ≤ 2 sor + összesítő,
+  dokumentáló ≤ 40 sor. Ha a tartalom tényleg nem fér bele, a túllépés oka az első sor.

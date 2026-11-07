@@ -239,6 +239,9 @@ class Sav {
       const u = m.usage;
       if (u && m.id) {
         const elozo = this.uzenetek.get(m.id) ?? { be: 0, ki: 0, olv: 0, ir5: 0, ir1: 0 };
+        // A kör teljes kontextusmérete (mérve, nem becsülve): ezt olvassa újra minden kör.
+        this.kontextus =
+          (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
         const ir1 = u.cache_creation?.ephemeral_1h_input_tokens ?? 0;
         const ir5 =
           u.cache_creation?.ephemeral_5m_input_tokens ??
@@ -555,6 +558,7 @@ function savJson(s, most, ota = null) {
     vege,
     fut: !s.kesz,
     korok: tok.korok,
+    kontextus: s.kontextus ?? 0,
     tokenek: tok,
     eszkozSzam: s.eszkozok.length,
     most: !s.kesz && utolsoEszkoz ? utolsoEszkoz.cimke : s.kesz ? "kész" : "gondolkodik…",
@@ -817,6 +821,7 @@ const OLDAL = /* html */ `<!doctype html>
   <div class="kpi"><b id="tok">0</b><span>kimenő token</span></div>
   <div class="kpi"><b id="usd">$0</b><span>becsült költség</span></div>
   <div class="kpi"><b id="tilt">0</b><span>guard-tiltás</span></div>
+  <div class="kpi"><b id="ctx">–</b><span>fő kontextus (token)</span></div>
   <div class="kpi"><span><i class="lampa" id="be"></i>backend :3001</span><span><i class="lampa" id="fe"></i>kliens :5173</span></div>
 </header>
 <main>
@@ -879,6 +884,11 @@ async function kor() {
   $("tok").textContent = ezres(o.ki);
   $("usd").textContent = "$" + o.usd.toFixed(2) + (o.usdHianyos ? "+" : "");
   $("tilt").textContent = o.tiltasok;
+  // A fő session utolsó körének kontextusa: ennyit olvas újra minden kör. 300k fölött narancs,
+  // 500k fölött piros — ott már a friss session olcsóbb volna (feature-full, „Indulás" 0.).
+  const ctx = a.fo ? a.fo.kontextus : 0;
+  $("ctx").textContent = ctx ? Math.round(ctx / 1000) + "k" : "–";
+  $("ctx").style.color = ctx > 500000 ? "var(--hiba)" : ctx > 300000 ? "var(--parancs)" : "";
   $("be").className = "lampa " + (a.stack.be ? "ok" : "nem");
   $("fe").className = "lampa " + (a.stack.fe ? "ok" : "nem");
 

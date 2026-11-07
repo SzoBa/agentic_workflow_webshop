@@ -113,6 +113,10 @@ a szabály a subagentekre.
 
 ### 0. A feature feloldása
 
+- **Friss session** (önálló futásnál): ha a beszélgetésben már folyt más munka, előbb javasold a
+  láncot új sessionben indítani — a lánc minden körben a teljes fő kontextust olvassa újra, az
+  állapota pedig fájlokban él. A részletek és a mért szám a `feature-full` „Indulás" 0. pontjában.
+
 - Ha a felhasználó megadta a feature nevét vagy a mappa útvonalát, azt használod.
 - Ha nem adta meg: `Glob`-bal listázd a `spec/*/` mappákat, és `AskUserQuestion`-nel kérdezz
   vissza, melyikre gondolt. **Ne találgass.**

@@ -33,3 +33,9 @@ visszakövetkeztetsz — és épp az veszik el, hogy mit hagytál ki szándékos
 
 A `UiSelectors.md`-vel együtt ez a **két** fájl, amit ebben a skillben írsz. Ne írj bele semmit,
 ami nem történt meg: a kitöltetlen mező őszintébb, mint a kitalált.
+
+**Tömören — minden szerkesztése a fő session kontextusába kerül.** Cellánként legfeljebb két
+mondat: a tény, a szám és a mutató (`fájl:sor`, parancs, kilépési kód). A subagent jelentését
+**nem** másolod át — egy sor összegzés és a jelentés eltérései elég. Egy blokkot **egy** `Edit`
+tölt ki, ne cellánként (mérve 2026-11-07: egy kis lánc naplószerkesztései ≈ 9k tokent tettek a
+fő kontextusba).
