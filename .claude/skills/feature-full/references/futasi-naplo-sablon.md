@@ -40,6 +40,7 @@ Lánc: `feature-full` · Indítva: {dátum} · Spec: `spec/{feature}/`
 | Futás-azonosító (a futásmérleg `--futas` értéke) | `{feature}-<ÉÉÉÉHHNN-ÓÓPP>` — a jelzőből, `kezdet`: {ISO-8601} (a `frissitve` fázisonként frissül, lásd `feature-implement` 0/c. 0. pont){, `session`: {azonosító} / `session` nélkül} {/ `FUTAS_AZONOSITO`={érték}, a jelző nem érvényes} {· elavult jelzőt írtam felül: …} |
 | Felbontás | {`Orchestrator.md`, ez a futás generálta — logika {A / C / D} / meglévő `Orchestrator.md` / alapértelmezett lánc — nincs `Orchestrator.md` / nincs `Orchestrator.md`, a `*Gazda:*` sorok szerint csomagonként, szekvenciálisan ({sorrend})} |
 | Stack | {a lánc indította / már futott — a fejlesztő indította újra a merge után} |
+| Élő nézet | {`http://127.0.0.1:4300` — elindítva / már futott ebben a sessionben / nem indult: {ok}} |
 
 Kiinduló `git status --porcelain` (szó szerint; üres fánál: „üres"):
 

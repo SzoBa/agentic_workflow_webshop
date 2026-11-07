@@ -36,6 +36,25 @@ ebben a sorrendben:
      delegálásainál a jelzőt nem veszi figyelembe (egy ottfelejtett jelző így nem könyvel
      idegen sessiont a futásra). Ha a session-azonosítót nem tudod biztosan, hagyd ki a mezőt —
      ne találd ki.
+   - **Élő nézet — minden futásnál, közvetlenül a megírás után.** A repó gyökeréből,
+     **háttérben** (a Bash eszköz `run_in_background: true` paraméterével):
+     `node .claude/skills/futas-merleg/scripts/elo-nezet.mjs`. A címét
+     (`http://127.0.0.1:4300`) egy sorban megmondod a fejlesztőnek, és a `Running.md`
+     „Kiinduló állapot" blokkjába is beírod. A nézet a böngészőben mutatja, **hol tart** a lánc:
+     a fázisokat (Spec → Felderítés → Implementáció ∥ e2e-írás → Integráció → E2E futás →
+     Validálás → Javító kör → Unit ∥ dokumentáció → Zárás), agentenként egy idősávot, a
+     tokeneket és a becsült költséget, a guard-tiltásokat, a worktree-k változásait. A fázist
+     maga vezeti le az agentek típusából és a fő session parancsaiból, tehát **neked nem kell
+     jelezned semmit** menet közben.
+     - **Idempotens:** ha a porton már ez a nézet fut (egy korábbi futásból ugyanebben a
+       sessionben), 0-val kilép, és a futó példány magától az új jelzőre vált.
+     - **Csak olvas** — a session-átiratot (a fejlesztő 2026-11-07-i jóváhagyásával), a jelzőt, a
+       `git worktree list`-et —, a mérlegbe nem könyvel, és **nem** állítod le a lánc végén: a
+       jelző törlése után a lezárt futást mutatja tovább.
+     - Ha nem indul (a 4300-as portot más szolgáltatás foglalja: 2-es kilépési kód), az **nem**
+       állítja meg a láncot: a `Running.md`-be írod, és mész tovább. Másik portot csak a
+       fejlesztő kérésére adsz meg (`--port <szám>`).
+     - Ha a `feature-full` hívott be, az már elindította — a második hívás ártalmatlan.
    - **Frissítés — minden fázis elején.** A 6 órás határ egy hosszú láncon, főleg egy emberi
      megálló (`AskUserQuestion`, újraindítás-kérés) alatt, lejárhat, és akkor a hook némán a
      session-azonosítóra könyvelne: a keret nulláról indulna. Ezért a lánc **minden lépés

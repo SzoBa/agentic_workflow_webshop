@@ -147,7 +147,9 @@ mechanikája. Az alábbi összefoglaló csak a kötelező szabályokat tartja:
 Sorrend: **0.** futásjelző (`.scratch/futas-merleg/aktiv-futas.json`, futásnév
 `{feature}-<ÉÉÉÉHHNN-ÓÓPP>`, `kezdet` = `frissitve`; másik feature friss jelzője → állj meg és
 kérdezz; utána **minden lépés elején** csak a `frissitve` frissül, a `futas` és a `kezdet`
-soha) · **1.** branch
+soha), és rögtön utána az **élő nézet** háttérben (`node
+.claude/skills/futas-merleg/scripts/elo-nezet.mjs`, idempotens, csak olvas, a lánc nem állítja
+le; a címét megmondod a fejlesztőnek) · **1.** branch
 (`git switch -c feature/{feature}`, ha a default branchen állsz; létező branch → állj meg és
 kérdezz) · **2.** spec-only commit, ha a spec commitolatlan · **3.** a kiinduló `HEAD` és a teljes
 `git status --porcelain` a `Running.md`-be. Ha a `feature-full` hívott be, csak ellenőrzöd.

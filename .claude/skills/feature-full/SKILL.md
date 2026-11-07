@@ -180,7 +180,9 @@ egymástól függetlenül bukhat és zöldülhet — a jelentésben **külön** 
    `"frissitve"` értékét cseréli. A `futas` és a `kezdet` változatlan: az átírásuk a keret
    megkerülése volna. A 3. fázis emberi megállója különösen ilyen pont: a fejlesztő válasza után,
    a 4. fázis első delegálása előtt frissíts. A mechanika a `feature-implement` 0/c. lépésének
-   0. pontjában van.
+   0. pontjában van — az **élő nézet** indításával együtt (ugyanott, „Élő nézet"): a megírás
+   után háttérben indítod, és a címét megmondod a fejlesztőnek, hogy a spec-kikérdezéstől a
+   zárásig a böngészőben kövesse, hol tart a lánc.
 
 ---
 

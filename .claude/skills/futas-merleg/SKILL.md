@@ -199,6 +199,34 @@ nélkül ugyanez `systemMessage`-figyelmeztetés). A teendő sorrendben:
 kisebbekre a korlát alá kerülésért, és ne állítsd `FUTAS_KERET=0`-ra magadtól.
 Az a fejlesztő döntése.
 
+### Élő nézet — „hol tartunk", a futás közben
+
+A mérleg utólag mondja meg, mi fogyott; az élő nézet **közben** mutatja a böngészőben:
+
+```
+node .claude/skills/futas-merleg/scripts/elo-nezet.mjs        # → http://127.0.0.1:4300
+```
+
+A láncskillek **minden futásnál** elindítják, a futásjelző megírása után, háttérben
+(a `feature-implement` skill 0/c. lépése, 0. pont, „Élő nézet"). Mit mutat: a lánc
+fázisait (Spec → Felderítés → Implementáció ∥ e2e-írás → Integráció → E2E futás → Validálás
+→ Javító kör → Unit ∥ dokumentáció → Zárás, állapotonként kész / fut / vár / kihagyva),
+agentenként egy idősávot az eszközhívásokkal és a guard-tiltásokkal, a tokeneket és a becsült
+költséget, a párhuzamossági szorzót, a worktree-k változásait és a stack lámpáit.
+
+- **Levezet, nem bemondásra dolgozik.** A fázist az agentek típusából (a `meta.json`
+  `agentType`-ja) és a fő session parancsaiból (`git merge`, `npm run e2e`, a jelzőt törlő `rm`,
+  írás a `spec/` alá) olvassa ki — minden lánc-alakra működik, és a láncnak menet közben semmit
+  nem kell jeleznie. Amit nem lát, azt nem találja ki: egy sosem látott fázis „vár", vagy
+  „kihagyva", ha egy későbbi már elindult.
+- **Csak olvas, és nem könyvel.** A számai a mérlegével azonos forrásból és ártáblából jönnek,
+  de becslések egy élő képernyőre: a kapu és a riport a `futasok.jsonl`-ből dolgozik, nem ebből.
+- A session-átiratot olvassa (a munkaterületen kívül) — ezt a fejlesztő 2026-11-07-én
+  kifejezetten jóváhagyta erre a nézetre. A `--atirat` jóváhagyási szabálya ettől független.
+- **Csak `127.0.0.1`-re köt**: az átiratban a promptok és a parancsok teljes szövege benne van.
+- **Idempotens** indulás; a lánc **nem** állítja le — a jelző törlése után a lezárt futást mutatja
+  tovább, egy új jelzőre magától átvált. Bemutatóhoz: `--cel-perc <N>` piros cél-időt rajzol.
+
 ### 4. Kalibrálás
 
 Küszöböt csak akkor javasolj, ha **van** mért futás hozzá. A javaslat alakja:
@@ -215,6 +243,7 @@ Ha a fejlesztő küszöböt módosít, az `AskUserQuestion`-nel megerősített d
 | `.claude/hooks/futas-kozos.mjs` | egyeztetés + ítélet — a hook és a szkript **közös** fele |
 | `.claude/hooks/futas-mero.mjs` | a `PreToolUse` kapu (mód: `kapu`) |
 | `scripts/futas-merleg.mjs` | ez a riport |
+| `scripts/elo-nezet.mjs` | az élő nézet („hol tartunk") — a láncskillek minden futásnál elindítják |
 | `references/kapu-szabalyok.md` | a négy szabály pontos szemantikája és a fail-open esetek |
 | `docs/orchestration/_kontextus/futasok.jsonl` | a napló (verziózott): számok, azonosítók, állapotok, a delegálás rövid leírása (`leiras` — a meta `description` mezője) és a hibaokok; prompt- és jelentésszöveg **nélkül** |
 | `docs/orchestration/_kontextus/keretek.json` | küszöbök és súlyok |

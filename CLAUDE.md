@@ -576,3 +576,16 @@ with no price (after stripping a `-YYYYMMDD` suffix) marks the USD figure `kolts
 and lists it in `araznatlan_modellek`; a partial USD never blocks on its own, the unit budget does. Money is always a **derived** figure printed with
 its source; the cost-unit weights are a stated assumption, not a measurement. If the gate fires,
 the threshold does not come down — same rule as the JaCoCo coverage gate.
+
+**The live view** (`.claude/skills/futas-merleg/scripts/elo-nezet.mjs`, `http://127.0.0.1:4300`)
+is the *during* counterpart of the report: "where are we" in the browser — the chain's phases,
+one time lane per agent with its tool calls and guard denials, tokens, estimated cost, worktrees,
+stack lights. `feature-implement` 0/c starts it in the background on **every run**, right after
+writing the run marker (decision 2026-11-07). It derives the phase from what it sees — the
+subagents' `agentType` and the main session's commands (`git merge`, `npm run e2e`, writes under
+`spec/`, the `rm` of the marker) — so the chain signals nothing. It is read-only and books
+nothing (the gate still reads only `futasok.jsonl`); it reads the session transcripts outside the
+workspace by the developer's standing approval for this view; it binds to `127.0.0.1` only,
+because the transcripts carry full prompts. Starting is idempotent, and the chain never stops it:
+after the marker is deleted it keeps showing the closed run. On Windows, stopping `./start.sh`'s
+background shell leaves the backend (3001) and Vite (5173) running — measured 2026-11-07.
